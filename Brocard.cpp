@@ -43,86 +43,86 @@ struct range_struct {
   const uint64_t *pinvs;
 };
 
-static inline uint64_t ll_mod_preinv(uint64_t a_hi, uint64_t a_lo, uint64_t n, uint64_t ninv) {
+static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, uint64_t ninv ) {
   uint64_t q0, q1, r;
 
-  int norm = __builtin_clzll(n);
+  int norm = __builtin_clzll( n );
 
   n <<= norm;
   a_hi <<= norm;
 
-  const uint64_t u1 = a_hi + r_shift(a_lo, FLINT_BITS - norm);
-  const uint64_t u0 = (a_lo << norm);
+  const uint64_t u1 = a_hi + r_shift( a_lo, FLINT_BITS - norm );
+  const uint64_t u0 = ( a_lo << norm );
 
-  umul_ppmm(q1, q0, ninv, u1);
-  add_ssaaaa(q1, q0, q1, q0, u1, u0);
+  umul_ppmm( q1, q0, ninv, u1 );
+  add_ssaaaa( q1, q0, q1, q0, u1, u0 );
 
-  r = (u0 - (q1 + 1) * n);
+  r = ( u0 - ( q1 + 1 ) * n );
 
-  if (r > q0) {
-      r += n;
+  if( r > q0 ) {
+    r += n;
   }
 
-  return (r < n) ? (r >> norm) : ((r - n) >> norm);
+  return ( r < n ) ? ( r >> norm ) : ( ( r - n ) >> norm );
 }
 
-static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv) {
+static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv ) {
   uint64_t p1, p2;
-  umul_ppmm(p1, p2, a, b);
-  return ll_mod_preinv(p1, p2, n, ninv);
+  umul_ppmm( p1, p2, a, b );
+  return ll_mod_preinv( p1, p2, n, ninv );
 }
 
-static inline uint64_t factorial_fast_mod2_preinv(uint64_t n, uint64_t p, uint64_t pinv) {
-    slong i, m;
-    nmod_t mod;
-    mp_ptr t, u, v;
-    mp_limb_t r, s;
+static inline uint64_t factorial_fast_mod2_preinv( uint64_t n, uint64_t p, uint64_t pinv ) {
+  slong i, m;
+  nmod_t mod;
+  mp_ptr t, u, v;
+  mp_limb_t r, s;
 
-    nmod_init(&mod, p);
+  nmod_init( &mod, p );
 
-    m = n_sqrt(n);
+  m = n_sqrt( n );
 
-    t = _nmod_vec_init(m + 1);
-    u = _nmod_vec_init(m + 1);
-    v = _nmod_vec_init(m + 1);
+  t = _nmod_vec_init( m + 1 );
+  u = _nmod_vec_init( m + 1 );
+  v = _nmod_vec_init( m + 1 );
 
-    t[0] = UWORD(0);
-    for (i = 1; i < m; i++)
-        t[i] = n_submod(t[i-1], UWORD(1), p);
+  t[0] = UWORD( 0 );
+  for( i = 1; i < m; i++ )
+    t[i] = n_submod( t[i - 1], UWORD( 1 ), p );
 
-    _nmod_poly_product_roots_nmod_vec(u, t, m, mod);
+  _nmod_poly_product_roots_nmod_vec( u, t, m, mod );
 
-    for (i = 0; i < m; i++)
-        t[i] = n_mod2_preinv(i * m + 1, p, pinv);
+  for( i = 0; i < m; i++ )
+    t[i] = n_mod2_preinv( i * m + 1, p, pinv );
 
-    _nmod_poly_evaluate_nmod_vec_fast(v, u, m + 1, t, m, mod);
+  _nmod_poly_evaluate_nmod_vec_fast( v, u, m + 1, t, m, mod );
 
-    r = 1;
-    for (i = 0; i < m; i++)
-        //r = n_mulmod2_preinv(r, v[i], mod.n, mod.ninv);
-        r = mulmod_preinv( r, v[i], mod.n, mod.ninv );
+  r = 1;
+  for( i = 0; i < m; i++ )
+    //r = n_mulmod2_preinv(r, v[i], mod.n, mod.ninv);
+    r = mulmod_preinv( r, v[i], mod.n, mod.ninv );
 
-    for (s = m * m + 1; s <= n; s++)
-        //r = n_mulmod2_preinv(r, s, mod.n, mod.ninv);
-        r = mulmod_preinv( r, s, mod.n, mod.ninv );
+  for( s = m * m + 1; s <= n; s++ )
+    //r = n_mulmod2_preinv(r, s, mod.n, mod.ninv);
+    r = mulmod_preinv( r, s, mod.n, mod.ninv );
 
-    _nmod_vec_clear(t);
-    _nmod_vec_clear(u);
-    _nmod_vec_clear(v);
+  _nmod_vec_clear( t );
+  _nmod_vec_clear( u );
+  _nmod_vec_clear( v );
 
-    return r;
+  return r;
 }
 
 static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_t pinv ) {
-  if ( n < (prime >> 1) ) {
+  if( n < ( prime >> 1 ) ) {
     return factorial_fast_mod2_preinv( n, prime, pinv );
   }
 
   uint64_t factorial = factorial_fast_mod2_preinv( prime - n - 1, prime, pinv );
-  
+
   factorial = n_invmod( factorial, prime );
 
-  if ( (n & 1) == 0 ) {
+  if( ( n & 1 ) == 0 ) {
     factorial = -factorial + prime;
   }
 
@@ -131,7 +131,7 @@ static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_
 
 static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
   // if (a == UWORD(0))
-  if ( __builtin_expect( x == y, 0 ) ) {
+  if( __builtin_expect( x == y, 0 ) ) {
     return 0;
   }
 
@@ -143,12 +143,12 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
   a = b;
   b = temp;*/
 
-  uint exp = __builtin_ctzll(b);
+  uint exp = __builtin_ctzll( b );
   //count_trailing_zeros( exp, b );
   b >>= exp;
 
   //if( ( ( exp * ( a * a - 1 ) ) / 8 ) % 2 == UWORD( 1 ) ) {
-  if ( ( exp * ( a * a - 1 ) ) & 8 ) {
+  if( ( exp * ( a * a - 1 ) ) & 8 ) {
     // s = -s
     s = -1;
   } else {
@@ -156,12 +156,12 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
   }
 
   //if( ( ( ( a - 1 ) * ( b - 1 ) ) / 4 ) % 2 == UWORD( 1 ) ) {
-  if ( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) {
+  if( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) {
     s = -s;
   }
 
-  while ( b != 1 ) {
-    if ( ( a >> 2 ) < b ) {
+  while( b != 1 ) {
+    if( ( a >> 2 ) < b ) {
       temp = a - b;
       a = b;
 
@@ -178,12 +178,12 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
       b = temp;
     }
 
-    if ( __builtin_expect( b == 0, 0 ) ) {
+    if( __builtin_expect( b == 0, 0 ) ) {
       // if (b == UWORD(0))
       return 0;
     }
 
-    exp = __builtin_ctzll(b);
+    exp = __builtin_ctzll( b );
     //count_trailing_zeros( exp, b );
     b >>= exp;
 
@@ -193,7 +193,7 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
     }
 
     //if( ( ( ( a - 1 ) * ( b - 1 ) ) / 4 ) % 2 == UWORD( 1 ) ) {
-    if( (( a - 1) * (b - 1)) & 4 ) {
+    if( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) {
       s = -s;
     }
   }
@@ -201,7 +201,7 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
   return s;
 }
 
-static inline void* brocard( void *arguments ) {
+static inline void *brocard( void *arguments ) {
   auto *range = static_cast<struct range_struct *>( arguments );
 
   int tid = range->tid;
@@ -213,24 +213,24 @@ static inline void* brocard( void *arguments ) {
 
   //printf( "Start: %llu, End: %llu\n", start, end );
 
-  ulong last_n[NUM_PRIMES] = {0};
+  ulong last_n[NUM_PRIMES] = { 0 };
 
-  for( unsigned long &i : last_n ) {
+  for( unsigned long &i: last_n ) {
     i = start - 1;
   }
 
   int best_i = 25, i;
   uint64_t n, prime, pinv;
 
-  for ( n = start; n <= end; ++n ) {
-    for ( i = 0; i < NUM_PRIMES; ++i ) {
+  for( n = start; n <= end; ++n ) {
+    for( i = 0; i < NUM_PRIMES; ++i ) {
       prime = primes[i];
       pinv = pinvs[i];
 
-      if (last_n[i] == n - 1) {
+      if( last_n[i] == n - 1 ) {
         factorials[i] = mulmod_preinv( factorials[i], n, prime, pinv );
-      } else if (n - last_n[i] <= MULMOD_DIFFERENCE) { // Allow for underflow
-        for ( uint64_t j = last_n[i] + 1; j <= n; ++j ) {
+      } else if( n - last_n[i] <= MULMOD_DIFFERENCE ) { // Allow for underflow
+        for( uint64_t j = last_n[i] + 1; j <= n; ++j ) {
           factorials[i] = mulmod_preinv( factorials[i], j, prime, pinv );
         }
       } else {
@@ -239,20 +239,20 @@ static inline void* brocard( void *arguments ) {
 
       last_n[i] = n;
 
-      if ( jacobi_unsigned( factorials[i] + 1, prime ) == -1 ) {
+      if( jacobi_unsigned( factorials[i] + 1, prime ) == -1 ) {
         break;
       }
     }
 
-    if ( __builtin_expect( static_cast<long>( i == NUM_PRIMES ), 0 ) != 0 ) {
+    if( __builtin_expect( static_cast<long>( i == NUM_PRIMES ), 0 ) != 0 ) {
       printf( "[Sub Range #%d] Potential Solution: %llu, primes[0] = %llu, factorials[0] = %llu\n", tid, n, primes[0], factorials[0] );
       FILE *fp = fopen( SOLUTION_FILE_NAME, "ae" );
       fprintf( fp, "%llu\n", n );
       fclose( fp );
-    } else if ( __builtin_expect( static_cast<long>( i >= best_i ), 0 ) != 0 ) {
+    } else if( __builtin_expect( static_cast<long>( i >= best_i ), 0 ) != 0 ) {
       best_i = i;
       printf( "[Sub Range #%d] Progress: %llu (%.2f%%), Tests Passed: %d\n", tid, n, 100.0 * tid / NUM_SUB_RANGES, best_i );
-    } else if ( __builtin_expect( static_cast<long>( n % MILESTONE == 0 ), 0 ) != 0 ) {
+    } else if( __builtin_expect( static_cast<long>( n % MILESTONE == 0 ), 0 ) != 0 ) {
       printf( "[Sub Range #%d] Progress: %llu (%.2f%%)\n", tid, n, 100.0 * tid / NUM_SUB_RANGES );
     }
   }
@@ -308,7 +308,7 @@ auto main() -> int {
     range->end = ( i == NUM_SUB_RANGES - 1 ) ? ENDING_N : starting_n + partition_size;
     range->primes = generate_primes( range->end, NUM_PRIMES );
     range->pinvs = generate_pinvs( range->primes, NUM_PRIMES );
-    
+
     auto *factorials = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
     uint64_t n = starting_n - 1;
 
