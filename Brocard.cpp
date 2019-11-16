@@ -1,10 +1,8 @@
+//#include <pthread.h>
 #include <flint/flint.h>
 #include <flint/nmod_vec.h>
 #include <flint/nmod_poly.h>
 #include <flint/ulong_extras.h>
-#include <pthread.h>
-#include <cstdint>
-#include <cstdio>
 #include <unistd.h>
 
 // Start at 1 trillion
@@ -16,7 +14,7 @@ constexpr uint64_t STARTING_N = 1;
 constexpr uint64_t ENDING_N = 1'000'000'000;
 
 // Milestone used for printing progress (5 billion)
-constexpr uint64_t MILESTONE = 5'000'000'000;
+constexpr uint64_t MILESTONE = 100'000'000;
 
 // The number of threads to use when computing the initial factorial values.
 // This is a memory hog, so a small amount of threads should be used here to
@@ -29,13 +27,12 @@ constexpr int FACTORIAL_NUM_THREADS = 8;
 // The number of primes to use when testing.
 constexpr int NUM_PRIMES = 40;
 
-// The amount of sub-ranges that the range (ENDING_N - STARTING_N) should be
-// partitioned into.
-constexpr int NUM_SUB_RANGES = 128;
+// The amount of sub-ranges that the range (ENDING_N - STARTING_N) should be partitioned into.
+constexpr int NUM_SUB_RANGES = 32;
 
 // If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
-constexpr int MULMOD_DIFFERENCE = 20'000'000;
+constexpr int MULMOD_DIFFERENCE = 2'000'000;
 
 struct range_struct {
   int tid;
@@ -117,7 +114,7 @@ static inline uint64_t factorial_fast_mod2_preinv(uint64_t n, uint64_t p, uint64
 }
 
 static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_t pinv ) {
-  if( n < (prime >> 1) ) {
+  if ( n < (prime >> 1) ) {
     return factorial_fast_mod2_preinv( n, prime, pinv );
   }
 
@@ -125,7 +122,7 @@ static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_
   
   factorial = n_invmod( factorial, prime );
 
-  if( (n & 1) == 0 ) {
+  if ( (n & 1) == 0 ) {
     factorial = -factorial + prime;
   }
 
@@ -151,7 +148,7 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
   b >>= exp;
 
   //if( ( ( exp * ( a * a - 1 ) ) / 8 ) % 2 == UWORD( 1 ) ) {
-  if( ( exp * ( a * a - 1 ) ) & 8 ) {
+  if ( ( exp * ( a * a - 1 ) ) & 8 ) {
     // s = -s
     s = -1;
   } else {
@@ -159,12 +156,12 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
   }
 
   //if( ( ( ( a - 1 ) * ( b - 1 ) ) / 4 ) % 2 == UWORD( 1 ) ) {
-  if( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) {
+  if ( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) {
     s = -s;
   }
 
-  while( b != UWORD( 1 ) ) {
-    if( ( a >> 2 ) < b ) {
+  while ( b != 1 ) {
+    if ( ( a >> 2 ) < b ) {
       temp = a - b;
       a = b;
 
@@ -181,7 +178,7 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
       b = temp;
     }
 
-    if( __builtin_expect( b == UWORD( 0 ), 0 ) ) {
+    if ( __builtin_expect( b == 0, 0 ) ) {
       // if (b == UWORD(0))
       return 0;
     }
@@ -196,7 +193,7 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
     }
 
     //if( ( ( ( a - 1 ) * ( b - 1 ) ) / 4 ) % 2 == UWORD( 1 ) ) {
-    if( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) {
+    if( (( a - 1) * (b - 1)) & 4 ) {
       s = -s;
     }
   }
@@ -204,7 +201,7 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
   return s;
 }
 
-auto brocard( void *arguments ) -> void * {
+static inline void* brocard( void *arguments ) {
   auto *range = static_cast<struct range_struct *>( arguments );
 
   int tid = range->tid;
@@ -222,28 +219,18 @@ auto brocard( void *arguments ) -> void * {
     i = start - 1;
   }
 
-  int best_i = 25;
-  int result;
-  int i;
+  int best_i = 25, i;
+  uint64_t n, prime, pinv;
 
-  uint64_t &factorial = factorials[0], prime = primes[0], pinv = pinvs[0];
-
-  for( uint64_t n = start; n <= end; ++n ) {
-    factorial = mulmod_preinv( factorial, n, prime, pinv );
-    last_n[0] = n;
-    result = jacobi_unsigned( factorial + 1, prime );
-
-    if( result == -1 ) {
-      continue;
-    }
-
-    for( i = 1; i < NUM_PRIMES; ++i ) {
-      prime = primes[i], pinv = pinvs[i];
+  for ( n = start; n <= end; ++n ) {
+    for ( i = 0; i < NUM_PRIMES; ++i ) {
+      prime = primes[i];
+      pinv = pinvs[i];
 
       if (last_n[i] == n - 1) {
         factorials[i] = mulmod_preinv( factorials[i], n, prime, pinv );
-      } else if (n >= MULMOD_DIFFERENCE && last_n[i] >= n - MULMOD_DIFFERENCE) {
-        for( uint64_t j = last_n[i] + 1; j <= n; ++j ) {
+      } else if (n - last_n[i] <= MULMOD_DIFFERENCE) { // Allow for underflow
+        for ( uint64_t j = last_n[i] + 1; j <= n; ++j ) {
           factorials[i] = mulmod_preinv( factorials[i], j, prime, pinv );
         }
       } else {
@@ -252,9 +239,7 @@ auto brocard( void *arguments ) -> void * {
 
       last_n[i] = n;
 
-      result = jacobi_unsigned( factorials[i] + 1, prime );
-
-      if( result == -1 ) {
+      if ( jacobi_unsigned( factorials[i] + 1, prime ) == -1 ) {
         break;
       }
     }
