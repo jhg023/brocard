@@ -130,34 +130,19 @@ static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_
 }
 
 static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
-  // if (a == UWORD(0))
-  if( __builtin_expect( x == y, 0 ) ) {
-    return 0;
-  }
-
-  uint64_t b = x, a = y, temp;
-  int s /*= 1*/;
-
-  // Because a swap was occurring immediately, we could just swap the function parameters.
-  /*temp = a;
-  a = b;
-  b = temp;*/
+  uint64_t b = x, a = y, temp, a_minus_one = a - 1;
+  int s;
 
   uint exp = __builtin_ctzll( b );
-  //count_trailing_zeros( exp, b );
   b >>= exp;
 
-  //if( ( ( exp * ( a * a - 1 ) ) / 8 ) % 2 == UWORD( 1 ) ) {
-  if( ( exp * ( a * a - 1 ) ) & 8 ) {
-    // s = -s
+  bool first = ( exp * ( a * a_minus_one ) ) & 8;
+  bool second = ( ( a_minus_one ) * ( b - 1 ) ) & 4;
+
+  if (first ^ second) {
     s = -1;
   } else {
     s = 1;
-  }
-
-  //if( ( ( ( a - 1 ) * ( b - 1 ) ) / 4 ) % 2 == UWORD( 1 ) ) {
-  if( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) {
-    s = -s;
   }
 
   while( b != 1 ) {
@@ -178,22 +163,18 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
       b = temp;
     }
 
-    if( __builtin_expect( b == 0, 0 ) ) {
-      // if (b == UWORD(0))
+    if ( b == 0 ) {
       return 0;
     }
 
     exp = __builtin_ctzll( b );
-    //count_trailing_zeros( exp, b );
     b >>= exp;
 
-    //if( ( ( exp * ( a * a - 1 ) ) / 8 ) % 2 == UWORD( 1 ) ) {
-    if( ( exp * ( a * a - 1 ) ) & 8 ) {
-      s = -s;
-    }
+    a_minus_one = a - 1;
+    first = ( exp * ( a * a_minus_one ) ) & 8;
+    second = ( ( a_minus_one ) * ( b - 1 ) ) & 4;
 
-    //if( ( ( ( a - 1 ) * ( b - 1 ) ) / 4 ) % 2 == UWORD( 1 ) ) {
-    if( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) {
+    if (first ^ second) {
       s = -s;
     }
   }
@@ -210,8 +191,6 @@ static inline void *brocard( void *arguments ) {
   uint64_t *factorials = range->factorials;
   const uint64_t *primes = range->primes;
   const uint64_t *pinvs = range->pinvs;
-
-  //printf( "Start: %llu, End: %llu\n", start, end );
 
   ulong last_n[NUM_PRIMES] = { 0 };
 
@@ -316,8 +295,6 @@ auto main() -> int {
     for( int i = 0; i < NUM_PRIMES; ++i ) {
       factorials[i] = initialize_factorial( n, range->primes[i], range->pinvs[i] );
     }
-
-    //printf( "[Thread #%d] Finished factorial initialization!\n", i );
 
     range->factorials = factorials;
 
