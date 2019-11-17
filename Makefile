@@ -1,6 +1,6 @@
 CXXFLAGS=-std=c++17 -march=native -mtune=native -fomit-frame-pointer -fno-stack-protector -fno-rtti -flto
 
-all: brocard bench
+all: brocard bench test
 
 brocard:
 	mkdir -p bin
@@ -14,6 +14,9 @@ bench:
 
 clean:
 	rm -f bin/*
+
+test:
+	$(CXX) $(CXXFLAGS) -Ofast -lgtest -lflint test/mulmod_test.cpp -o bin/mulmod_test
 
 
 .PHONY: all test clean bench brocard
