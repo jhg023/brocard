@@ -41,7 +41,17 @@ struct range_struct {
   uint64_t *factorials;
   const uint64_t *primes;
   const uint64_t *pinvs;
+  const int *exponents;
+  const long double *ratios;
 };
+
+// Returns '(a * b) % n'
+static inline uint64_t mulmod_barrett( uint64_t a, uint64_t b, uint64_t n, int exponent, long double ratio ) {
+  __int128 x = (__int128) a * b;
+  __int128 temp = ( x >> exponent ) * ratio;
+  uint64_t t = x - ( temp * n );
+  return ( t < n ? t : t - n );
+}
 
 static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, uint64_t ninv ) {
   uint64_t q0, q1, r;
@@ -183,13 +193,14 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
 
 static inline void *brocard( void *arguments ) {
   auto *range = static_cast<struct range_struct *>( arguments );
-
   int tid = range->tid;
   uint64_t start = range->start;
   uint64_t end = range->end;
   uint64_t *factorials = range->factorials;
   const uint64_t *primes = range->primes;
   const uint64_t *pinvs = range->pinvs;
+  const int *exponents = range->exponents;
+  const long double *ratios = range->ratios;
 
   ulong last_n[NUM_PRIMES] = { 0 };
 
@@ -197,19 +208,22 @@ static inline void *brocard( void *arguments ) {
     i = start - 1;
   }
 
-  int best_i = 25, i;
+  long double ratio;
+  int best_i = 25, exponent, i;
   uint64_t n, prime, pinv;
 
   for( n = start; n <= end; ++n ) {
     for( i = 0; i < NUM_PRIMES; ++i ) {
       prime = primes[i];
       pinv = pinvs[i];
+      exponent = exponents[i];
+      ratio = ratios[i];
 
       if( last_n[i] == n - 1 ) {
-        factorials[i] = mulmod_preinv( factorials[i], n, prime, pinv );
+        factorials[i] = mulmod_barrett( factorials[i], n, prime, exponent, ratio );
       } else if( n - last_n[i] <= MULMOD_DIFFERENCE ) { // Allow for underflow
         for( uint64_t j = last_n[i] + 1; j <= n; ++j ) {
-          factorials[i] = mulmod_preinv( factorials[i], j, prime, pinv );
+          factorials[i] = mulmod_barrett( factorials[i], j, prime, exponent, ratio );
         }
       } else {
         factorials[i] = initialize_factorial( n, prime, pinv );
@@ -249,7 +263,7 @@ auto generate_primes( uint64_t start, uint64_t num_primes ) -> uint64_t * {
 
   auto *primes = static_cast<uint64_t *>( calloc( num_primes, sizeof( uint64_t ) ) );
 
-  for( uint64_t i = 0; i < num_primes; ++i ) {
+  for( int i = 0; i < num_primes; ++i ) {
     primes[i] = n_primes_next( iter );
   }
 
@@ -261,11 +275,32 @@ auto generate_primes( uint64_t start, uint64_t num_primes ) -> uint64_t * {
 auto generate_pinvs( const uint64_t *primes, uint64_t num_primes ) -> uint64_t * {
   auto *pinvs = static_cast<uint64_t *>( calloc( num_primes, sizeof( uint64_t ) ) );
 
-  for( uint64_t i = 0; i < num_primes; ++i ) {
+  for( int i = 0; i < num_primes; ++i ) {
     pinvs[i] = n_preinvert_limb( primes[i] );
   }
 
   return pinvs;
+}
+
+auto generate_exponents( const uint64_t *primes, uint64_t num_primes ) -> int * {
+  auto *exponents = static_cast<int *>( calloc( num_primes, sizeof( int ) ) );
+
+  for( int i = 0; i < num_primes; ++i ) {
+    exponents[i] = FLINT_CLOG2( primes[i] );
+  }
+
+  return exponents;
+}
+
+auto generate_ratios( const uint64_t *primes, const int * exponents, uint64_t num_primes ) -> long double * {
+  auto *ratios = static_cast<long double *>( calloc( num_primes, sizeof( int ) ) );
+
+  for( int i = 0; i < num_primes; ++i ) {
+    int exponent = exponents[i];
+    ratios[i] = (long double) ( ( 1ULL << ( exponent * 2 ) ) / primes[i] ) / ( 1ULL << exponent );
+  }
+
+  return ratios;
 }
 
 auto main() -> int {
@@ -286,6 +321,8 @@ auto main() -> int {
     range->end = ( i == NUM_SUB_RANGES - 1 ) ? ENDING_N : starting_n + partition_size;
     range->primes = generate_primes( range->end, NUM_PRIMES );
     range->pinvs = generate_pinvs( range->primes, NUM_PRIMES );
+    range->exponents = generate_exponents( range->primes, NUM_PRIMES );
+    range->ratios = generate_ratios( range->primes, range->exponents, NUM_PRIMES );
 
     auto *factorials = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
     uint64_t n = starting_n - 1;
