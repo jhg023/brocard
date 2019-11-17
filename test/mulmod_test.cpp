@@ -1,4 +1,4 @@
-#include "gtest/gtest.h"
+#include <gtest/gtest.h>
 #include <flint/flint.h>
 #include <flint/ulong_extras.h>
 
@@ -77,12 +77,10 @@ constexpr auto n_clog( uint64_t n ) -> uint64_t {
   return r;
 }
 
-auto mulmod_barrett( uint64_t a, uint64_t b, uint64_t n, int k, uint64_t r ) -> uint64_t {
-  __int128 a_128 = a;
-  __int128 b_128 = b;
-  __int128 n_128 = n;
-  __int128 x = a_128 * b_128;
-  __int128 t = x - ( ( ( x * r ) >> k ) * n_128 );
+auto mulmod_barrett( uint64_t a, uint64_t b, uint64_t n, int k, long double r ) -> uint64_t {
+  __int128 x = (__int128) a * b;
+  __int128 temp = (x >> k) * r;
+  uint64_t t = x - (temp * n );
   return ( t < n ? t : t - n );
 }
 
@@ -239,9 +237,12 @@ TEST( MulmodTest, mulmod_asm ) {
 
 TEST( MulmodTest, mulmod_barrett ) {
   for( uint64_t i = 0; i < NUM_TESTS; ++i ) {
-    int k = n_clog( test_data[i][3] ) << 1;
-    uint64_t r = pow( 4, k >> 1, test_data[i][3] );
-    ASSERT_EQ( test_data[i][0], mulmod_barrett( test_data[i][1], test_data[i][2], test_data[i][3], k, r ) );
+    int prime_modulus = test_data[i][3];
+    int n = n_clog( prime_modulus );
+    __int128 numerator = 1 << (n * 2);
+    uint64_t mu = numerator / prime_modulus;
+    long double r = (long double) mu / (1 << n);
+    ASSERT_EQ( test_data[i][0], mulmod_barrett( test_data[i][1], test_data[i][2], prime_modulus, n, r ) );
   }
 }
 

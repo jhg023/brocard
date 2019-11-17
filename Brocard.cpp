@@ -1,4 +1,4 @@
-//#include <pthread.h>
+#include <cfloat>
 #include <flint/flint.h>
 #include <flint/nmod_vec.h>
 #include <flint/nmod_poly.h>
