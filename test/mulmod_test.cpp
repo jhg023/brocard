@@ -237,11 +237,11 @@ TEST( MulmodTest, mulmod_asm ) {
 
 TEST( MulmodTest, mulmod_barrett ) {
   for( uint64_t i = 0; i < NUM_TESTS; ++i ) {
-    int prime_modulus = test_data[i][3];
-    int n = n_clog( prime_modulus );
+    uint64_t prime_modulus = test_data[i][3];
+    uint64_t n = n_clog( prime_modulus );
     __int128 numerator = (__int128) 1 << (n * 2);
     uint64_t mu = numerator / prime_modulus;
-    long double r = (long double) mu / (1 << n);
+    long double r = (long double) mu / (1ULL << n);
     ASSERT_EQ( test_data[i][0], mulmod_barrett( test_data[i][1], test_data[i][2], prime_modulus, n, r ) );
   }
 }
