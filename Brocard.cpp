@@ -51,7 +51,9 @@ static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, 
   n <<= norm;
   a_hi <<= norm;
 
-  const uint64_t u1 = a_hi + r_shift( a_lo, FLINT_BITS - norm );
+  // We don't need r_shift, as 'norm' will never be 0
+  //const uint64_t u1 = a_hi + r_shift( a_lo, FLINT_BITS - norm );
+  const uint64_t u1 = a_hi + ( a_lo >> ( FLINT_BITS - norm ) );
   const uint64_t u0 = ( a_lo << norm );
 
   umul_ppmm( q1, q0, ninv, u1 );
@@ -63,7 +65,13 @@ static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, 
     r += n;
   }
 
-  return ( r < n ) ? ( r >> norm ) : ( ( r - n ) >> norm );
+  if( __builtin_expect( r < n, 1 ) ) {
+    return r >> norm;
+  }
+
+  // I've never seen the above condition be false, so this return statement
+  // may be able to be removed.
+  return ( r - n ) >> norm;
 }
 
 static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv ) {
