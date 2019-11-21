@@ -46,7 +46,7 @@ struct range_struct {
 static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, uint64_t ninv ) {
   uint64_t q0, q1, r;
 
-  int norm = __builtin_clzll( n );
+  const int norm = __builtin_clzll( n );
 
   n <<= norm;
   a_hi <<= norm;
@@ -199,9 +199,9 @@ static inline void *brocard( void *arguments ) {
   const uint64_t *primes = range->primes;
   const uint64_t *pinvs = range->pinvs;
 
-  ulong last_n[NUM_PRIMES] = { 0 };
+  uint64_t last_n[NUM_PRIMES] = { 0 };
 
-  for( unsigned long &i: last_n ) {
+  for( uint64_t &i : last_n ) {
     i = start - 1;
   }
 
