@@ -8,13 +8,13 @@
 constexpr uint64_t STARTING_N = 1;
 constexpr uint64_t ENDING_N = 1'000'000'000;
 
-// Milestone used for printing progress (5 billion)
+// Milestone used for printing progress
 constexpr uint64_t MILESTONE = 100'000'000;
 
 // The number of threads to use when computing the initial factorial values.
 // This is a memory hog, so a small amount of threads should be used here to
 // avoid running out of memory.
-constexpr int FACTORIAL_NUM_THREADS = 32;
+constexpr int FACTORIAL_NUM_THREADS = 8;
 
 // The name of the file to write potential solutions to.
 #define SOLUTION_FILE_NAME "brocard_solutions.txt"
@@ -29,13 +29,6 @@ constexpr int NUM_SUB_RANGES = 32;
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
 constexpr int MULMOD_DIFFERENCE = 2'000'000;
 
-#define umul_ppmm( w1, w0, u, v ) __asm__( "mulq %3" : "=a"( w0 ), "=d"( w1 ) : "%0"( ( uint64_t )( u ) ), "rm"( ( uint64_t )( v ) ) )
-
-#define add_ssaaaa( sh, sl, ah, al, bh, bl )                                                                                                         \
-  __asm__( "addq %5,%q1\n\tadcq %3,%q0"                                                                                                              \
-           : "=r"( sh ), "=&r"( sl )                                                                                                                 \
-           : "0"( ( uint64_t )( ah ) ), "rme"( ( uint64_t )( bh ) ), "%1"( ( uint64_t )( al ) ), "rme"( ( uint64_t )( bl ) ) )
-
 struct range_struct {
   int tid;
   uint64_t start;
@@ -46,7 +39,7 @@ struct range_struct {
 };
 
 static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, uint64_t ninv ) {
-  int norm = __builtin_clzll( n );
+  const int norm = __builtin_clzll( n );
 
   n <<= norm;
   a_hi <<= norm;
@@ -202,9 +195,9 @@ static inline void *brocard( void *arguments ) {
   const uint64_t *primes = range->primes;
   const uint64_t *pinvs = range->pinvs;
 
-  ulong last_n[NUM_PRIMES] = { 0 };
+  uint64_t last_n[NUM_PRIMES] = { 0 };
 
-  for( unsigned long &i: last_n ) {
+  for( uint64_t &i : last_n ) {
     i = start - 1;
   }
 
