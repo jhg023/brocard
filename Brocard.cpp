@@ -126,23 +126,16 @@ static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_
   return factorial % prime;
 }
 
-static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
-  uint64_t b = x, a = y, temp;
-  int s;
-
-  int exp = __builtin_ctzll( b );
+static inline int jacobi_unsigned( uint64_t b, uint64_t a ) {
+  uint64_t exp = __builtin_ctzll( b );
   b >>= exp;
 
   bool first = ( ( exp * ( a * a - 1 ) ) & 8 ) != 0;
   bool second = ( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) != 0;
 
-  if( first != second ) {
-    s = -1;
-  } else {
-    s = 1;
-  }
+  int s = ( first != second ) ? -1 : 1;
 
-  uint64_t b1, orig_a;
+  uint64_t b1, orig_a, temp;
 
   while( b != 1 ) {
     orig_a = a;
@@ -187,7 +180,7 @@ static inline void *brocard( void *arguments ) {
     i = start - 1;
   }
 
-  int best_i = 25, i;
+  int best_i = 25, i, result;
   uint64_t n, prime, pinv;
 
   for( n = start; n <= end; ++n ) {
@@ -195,9 +188,7 @@ static inline void *brocard( void *arguments ) {
       prime = primes[i];
       pinv = pinvs[i];
 
-      if( last_n[i] == n - 1 ) {
-        factorials[i] = mulmod_preinv( factorials[i], n, prime, pinv );
-      } else if( n - last_n[i] <= MULMOD_DIFFERENCE ) { // Allow for underflow
+      if( n - last_n[i] <= MULMOD_DIFFERENCE ) { // Allow for underflow
         for( uint64_t j = last_n[i] + 1; j <= n; ++j ) {
           factorials[i] = mulmod_preinv( factorials[i], j, prime, pinv );
         }
@@ -207,20 +198,22 @@ static inline void *brocard( void *arguments ) {
 
       last_n[i] = n;
 
-      if( jacobi_unsigned( factorials[i] + 1, prime ) == -1 ) {
+      result = jacobi_unsigned( factorials[i] + 1, prime );
+
+      if( result == -1 ) {
         break;
       }
     }
 
-    if( __builtin_expect( static_cast<long>( i == NUM_PRIMES ), 0 ) != 0 ) {
+    if( __builtin_expect( i == NUM_PRIMES, 0 ) ) {
       printf( "[Sub Range #%d] Potential Solution: %llu, primes[0] = %llu, factorials[0] = %llu\n", tid, n, primes[0], factorials[0] );
       FILE *fp = fopen( SOLUTION_FILE_NAME, "ae" );
       fprintf( fp, "%llu\n", n );
       fclose( fp );
-    } else if( __builtin_expect( static_cast<long>( i >= best_i ), 0 ) != 0 ) {
+    } else if( __builtin_expect( i >= best_i, 0 ) ) {
       best_i = i;
       printf( "[Sub Range #%d] Progress: %llu (%.2f%%), Tests Passed: %d\n", tid, n, 100.0 * tid / NUM_SUB_RANGES, best_i );
-    } else if( __builtin_expect( static_cast<long>( n % MILESTONE == 0 ), 0 ) != 0 ) {
+    } else if( __builtin_expect( n % MILESTONE == 0, 0 ) ) {
       printf( "[Sub Range #%d] Progress: %llu (%.2f%%)\n", tid, n, 100.0 * tid / NUM_SUB_RANGES );
     }
   }
@@ -266,19 +259,17 @@ auto main() -> int {
 
   struct range_struct ranges[NUM_SUB_RANGES];
 
-  uint64_t starting_n = STARTING_N;
-
   for( int i = 0; i < NUM_SUB_RANGES; ++i ) {
     auto *range = static_cast<struct range_struct *>( malloc( sizeof( struct range_struct ) ) );
 
     range->tid = i;
-    range->start = starting_n;
-    range->end = ( i == NUM_SUB_RANGES - 1 ) ? ENDING_N : starting_n + partition_size;
+    range->start = STARTING_N + ( i * partition_size );
+    range->end = ( i == NUM_SUB_RANGES - 1 ) ? ENDING_N : range->start + partition_size - 1;
     range->primes = generate_primes( range->end, NUM_PRIMES );
     range->pinvs = generate_pinvs( range->primes, NUM_PRIMES );
 
     auto *factorials = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
-    uint64_t n = starting_n - 1;
+    uint64_t n = range->start - 1;
 
 #pragma omp parallel for num_threads( FACTORIAL_NUM_THREADS ) schedule( dynamic )
     for( int i = 0; i < NUM_PRIMES; ++i ) {
@@ -288,7 +279,6 @@ auto main() -> int {
     range->factorials = factorials;
 
     ranges[i] = *range;
-    starting_n += partition_size + 1;
   }
 
 #pragma omp parallel for schedule( dynamic )
