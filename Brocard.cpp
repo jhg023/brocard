@@ -127,36 +127,32 @@ static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_
 }
 
 static inline int jacobi_unsigned( uint64_t b, uint64_t a ) {
+  if ( __builtin_expect( a == b, 0 ) ) {
+    return 0;
+  }
+
   uint64_t exp = __builtin_ctzll( b );
   b >>= exp;
 
-  bool first = ( ( exp * ( a * a - 1 ) ) & 8 ) != 0;
-  bool second = ( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) != 0;
+  int first = ( ( exp * ( a * a - 1 ) ) & 8 );
+  int second = ( ( ( a - 1 ) * ( b - 1 ) ) & 4 );
 
-  int s = ( first != second ) ? -1 : 1;
+  int s = ( first != ( second << 1 ) ) ? -1 : 1;
 
-  uint64_t b1, orig_a, temp;
+  uint64_t temp;
 
   while( b != 1 ) {
-    orig_a = a;
-
-    temp = a - b;
-    b1 = ( temp < b ) ? temp : ( temp < ( b << 1 ) ) ? temp - b : temp - ( b << 1 );
-
+    temp = a % b;
     a = b;
-    b = ( ( orig_a >> 2 ) < b ) ? b1 : orig_a % b;
-
-    if( b == 0 ) {
-      return 0;
-    }
+    b = temp;
 
     exp = __builtin_ctzll( b );
     b >>= exp;
 
-    first = ( ( exp * ( a * a - 1 ) ) & 8 ) != 0;
-    second = ( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) != 0;
+    first = ( ( exp * ( a * a - 1 ) ) & 8 );
+    second = ( ( ( a - 1 ) * ( b - 1 ) ) & 4 );
 
-    if( first != second ) {
+    if( first != ( second << 1 ) ) {
       s = -s;
     }
   }
