@@ -154,16 +154,7 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
     b2 = a % b;
     temp1 = a - b;
     a1 = b;
-    if( temp1 < b ) {
-      b1 = temp1;
-    } else {
-      if( temp1 < ( b << 1 ) ) {
-        b1 = temp1 - a;
-      } else {
-        b1 = temp1 - ( a << 1 );
-      }
-    }
-
+    b1 = (temp1 < b) ? temp1 : (( temp1 < ( b << 1 ) ) ? temp1 - a : temp1 - ( a << 1 ));
     a = ( ( a >> 2 ) < b ) ? a2 : a1;
     b = ( ( a >> 2 ) < b ) ? b2 : b1;
 
