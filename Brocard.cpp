@@ -60,13 +60,7 @@ static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, 
     r += n;
   }
 
-  if( __builtin_expect( r < n, 1 ) ) {
-    return r >> norm;
-  }
-
-  // I've never seen the above condition be false, so this return statement
-  // may be able to be removed.
-  return ( r - n ) >> norm;
+  return __builtin_expect( r < n, 1 ) ? r >> norm : ( r - n ) >> norm;
 }
 
 static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv ) {
@@ -136,7 +130,7 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
   uint64_t b = x, a = y, temp;
   int s;
 
-  uint32_t exp = __builtin_ctzll( b );
+  int exp = __builtin_ctzll( b );
   b >>= exp;
 
   bool first = ( ( exp * ( a * a - 1 ) ) & 8 ) != 0;
@@ -148,15 +142,16 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
     s = 1;
   }
 
+  uint64_t b1, orig_a;
+
   while( b != 1 ) {
-    uint64_t a1, b1, a2, b2, temp1;
-    a2 = b;
-    b2 = a % b;
-    temp1 = a - b;
-    a1 = b;
-    b1 = (temp1 < b) ? temp1 : (( temp1 < ( b << 1 ) ) ? temp1 - a : temp1 - ( a << 1 ));
-    a = ( ( a >> 2 ) < b ) ? a2 : a1;
-    b = ( ( a >> 2 ) < b ) ? b2 : b1;
+    orig_a = a;
+
+    temp = a - b;
+    b1 = ( temp < b ) ? temp : ( temp < ( b << 1 ) ) ? temp - b : temp - ( b << 1 );
+
+    a = b;
+    b = ( ( orig_a >> 2 ) < b ) ? b1 : orig_a % b;
 
     if( b == 0 ) {
       return 0;
