@@ -1,16 +1,11 @@
-#include <cfloat>
 #include <flint/flint.h>
 #include <flint/nmod_vec.h>
 #include <flint/nmod_poly.h>
 #include <flint/ulong_extras.h>
 #include <unistd.h>
+#include <cstdint>
 
-// Start at 1 trillion
-//#define STARTING_N 1094393000000
 constexpr uint64_t STARTING_N = 1;
-
-// End at 5 trillion
-//#define ENDING_N 5000000000000
 constexpr uint64_t ENDING_N = 1'000'000'000;
 
 // Milestone used for printing progress (5 billion)
@@ -19,7 +14,7 @@ constexpr uint64_t MILESTONE = 100'000'000;
 // The number of threads to use when computing the initial factorial values.
 // This is a memory hog, so a small amount of threads should be used here to
 // avoid running out of memory.
-constexpr int FACTORIAL_NUM_THREADS = 8;
+constexpr int FACTORIAL_NUM_THREADS = 32;
 
 // The name of the file to write potential solutions to.
 #define SOLUTION_FILE_NAME "brocard_solutions.txt"
@@ -34,6 +29,13 @@ constexpr int NUM_SUB_RANGES = 32;
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
 constexpr int MULMOD_DIFFERENCE = 2'000'000;
 
+#define umul_ppmm( w1, w0, u, v ) __asm__( "mulq %3" : "=a"( w0 ), "=d"( w1 ) : "%0"( ( uint64_t )( u ) ), "rm"( ( uint64_t )( v ) ) )
+
+#define add_ssaaaa( sh, sl, ah, al, bh, bl )                                                                                                         \
+  __asm__( "addq %5,%q1\n\tadcq %3,%q0"                                                                                                              \
+           : "=r"( sh ), "=&r"( sl )                                                                                                                 \
+           : "0"( ( uint64_t )( ah ) ), "rme"( ( uint64_t )( bh ) ), "%1"( ( uint64_t )( al ) ), "rme"( ( uint64_t )( bl ) ) )
+
 struct range_struct {
   int tid;
   uint64_t start;
@@ -44,8 +46,6 @@ struct range_struct {
 };
 
 static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, uint64_t ninv ) {
-  uint64_t q0, q1, r;
-
   int norm = __builtin_clzll( n );
 
   n <<= norm;
@@ -56,10 +56,12 @@ static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, 
   const uint64_t u1 = a_hi + ( a_lo >> ( FLINT_BITS - norm ) );
   const uint64_t u0 = ( a_lo << norm );
 
+  uint64_t q0, q1;
+
   umul_ppmm( q1, q0, ninv, u1 );
   add_ssaaaa( q1, q0, q1, q0, u1, u0 );
 
-  r = ( u0 - ( q1 + 1 ) * n );
+  uint64_t r = ( u0 - ( q1 + 1 ) * n );
 
   if( r > q0 ) {
     r += n;
@@ -84,7 +86,7 @@ static inline uint64_t factorial_fast_mod2_preinv( uint64_t n, uint64_t p, uint6
   slong i, m;
   nmod_t mod;
   mp_ptr t, u, v;
-  mp_limb_t r, s;
+  uint64_t r, s;
 
   nmod_init( &mod, p );
 
@@ -141,47 +143,48 @@ static inline int jacobi_unsigned( uint64_t x, uint64_t y ) {
   uint64_t b = x, a = y, temp;
   int s;
 
-  uint exp = __builtin_ctzll( b );
+  uint32_t exp = __builtin_ctzll( b );
   b >>= exp;
 
-  bool first = (( exp * ( a * a - 1 ) ) & 8) != 0;
-  bool second = (( ( a - 1 ) * ( b - 1 ) ) & 4) != 0;
+  bool first = ( ( exp * ( a * a - 1 ) ) & 8 ) != 0;
+  bool second = ( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) != 0;
 
-  if (first != second) {
+  if( first != second ) {
     s = -1;
   } else {
     s = 1;
   }
 
   while( b != 1 ) {
-    if( ( a >> 2 ) < b ) {
-      temp = a - b;
-      a = b;
-
-      if( temp < b ) {
-        b = temp;
-      } else if( temp < ( b << 1 ) ) {
-        b = temp - a;
-      } else {
-        b = temp - ( a << 1 );
-      }
+    uint64_t a1, b1, a2, b2, temp1;
+    a2 = b;
+    b2 = a % b;
+    temp1 = a - b;
+    a1 = b;
+    if( temp1 < b ) {
+      b1 = temp1;
     } else {
-      temp = a % b;
-      a = b;
-      b = temp;
+      if( temp1 < ( b << 1 ) ) {
+        b1 = temp1 - a;
+      } else {
+        b1 = temp1 - ( a << 1 );
+      }
     }
 
-    if ( b == 0 ) {
+    a = ( ( a >> 2 ) < b ) ? a2 : a1;
+    b = ( ( a >> 2 ) < b ) ? b2 : b1;
+
+    if( b == 0 ) {
       return 0;
     }
 
     exp = __builtin_ctzll( b );
     b >>= exp;
 
-    first = (( exp * ( a * a - 1 ) ) & 8) != 0;
-    second =  (( ( a - 1 ) * ( b - 1 ) ) & 4) != 0;
+    first = ( ( exp * ( a * a - 1 ) ) & 8 ) != 0;
+    second = ( ( ( a - 1 ) * ( b - 1 ) ) & 4 ) != 0;
 
-    if (first != second) {
+    if( first != second ) {
       s = -s;
     }
   }
