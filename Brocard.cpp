@@ -54,13 +54,9 @@ static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, 
   umul_ppmm( q1, q0, ninv, u1 );
   add_ssaaaa( q1, q0, q1, q0, u1, u0 );
 
-  uint64_t r = ( u0 - ( q1 + 1 ) * n );
+  uint64_t r = ( u0 - ( q1 + 1 ) * n ) + n;
 
-  if( r > q0 ) {
-    r += n;
-  }
-
-  return __builtin_expect( r < n, 1 ) ? r >> norm : ( r - n ) >> norm;
+  return ( r < n ) ? r >> norm : ( r - n ) >> norm;
 }
 
 static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv ) {
@@ -163,9 +159,9 @@ static inline int jacobi_unsigned( uint64_t b, uint64_t a ) {
 static inline void *brocard( void *arguments ) {
   auto *range = static_cast<struct range_struct *>( arguments );
 
-  int tid = range->tid;
-  uint64_t start = range->start;
-  uint64_t end = range->end;
+  const int tid = range->tid;
+  const uint64_t start = range->start;
+  const uint64_t end = range->end;
   uint64_t *factorials = range->factorials;
   const uint64_t *primes = range->primes;
   const uint64_t *pinvs = range->pinvs;
