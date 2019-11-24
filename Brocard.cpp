@@ -122,38 +122,43 @@ static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_
   return factorial % prime;
 }
 
-static inline int jacobi_unsigned( uint64_t b, uint64_t a ) {
-  if ( __builtin_expect( a == b, 0 ) ) {
-    return 0;
-  }
+#define CNST_LIMB(C) ((uint64_t) C##LL)
+#define MP_LIMB_T_MAX      (~ (uint64_t) 0)
+#define GMP_LIMB_HIGHBIT  (MP_LIMB_T_MAX ^ (MP_LIMB_T_MAX >> 1))
+#define LIMB_HIGHBIT_TO_MASK(n)						\
+  (((int64_t) -1 >> 1) < 0					\
+   ? (int64_t) (n) >> (63)			\
+   : (n) & GMP_LIMB_HIGHBIT ? MP_LIMB_T_MAX : CNST_LIMB(0))
 
-  uint64_t exp = __builtin_ctzll( b );
-  b >>= exp;
+static inline int jacobi_unsigned (uint64_t a, uint64_t b) {
+  int c, bit = 0;
 
-  int first = ( ( exp * ( a * a - 1 ) ) & 8 );
-  int second = ( ( ( a - 1 ) * ( b - 1 ) ) & 4 );
+  bit >>= 1;
+  b >>= 1;
+  c = __builtin_ctzll(a);
+  bit ^= c & (b ^ (b >> 1));
+  a >>= c;
+  a >>= 1;
 
-  int s = ( first != ( second << 1 ) ) ? -1 : 1;
+  do
+    {
+      uint64_t t = a - b;
+      uint64_t bgta = LIMB_HIGHBIT_TO_MASK (t);
 
-  uint64_t temp;
-
-  while( b != 1 ) {
-    temp = a % b;
-    a = b;
-    b = temp;
-
-    exp = __builtin_ctzll( b );
-    b >>= exp;
-
-    first = ( ( exp * ( a * a - 1 ) ) & 8 );
-    second = ( ( ( a - 1 ) * ( b - 1 ) ) & 4 );
-
-    if( first != ( second << 1 ) ) {
-      s = -s;
+      if (t == 0){
+        return 0;
+      }
+      bit ^= (bgta & a & b);
+      b += (bgta & t);
+      a = (t ^ bgta) - bgta;
+      c = __builtin_ctzll(t);
+      c++;
+      bit ^= c & (b ^ (b >> 1));
+      a >>= c;
     }
-  }
+  while (b > 0);
 
-  return s;
+  return 1-2*(bit & 1);
 }
 
 static inline void *brocard( void *arguments ) {
@@ -168,7 +173,7 @@ static inline void *brocard( void *arguments ) {
 
   uint64_t last_n[NUM_PRIMES] = { 0 };
 
-  for( uint64_t &i : last_n ) {
+  for( uint64_t &i: last_n ) {
     i = start - 1;
   }
 
