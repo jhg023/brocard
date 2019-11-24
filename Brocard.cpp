@@ -27,7 +27,7 @@ constexpr int NUM_SUB_RANGES = 32;
 
 // If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
-constexpr int MULMOD_DIFFERENCE = 2'000'000;
+constexpr int MULMOD_DIFFERENCE = 3'000'000;
 
 struct range_struct {
   int tid;
