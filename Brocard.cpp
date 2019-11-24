@@ -156,7 +156,6 @@ static inline int jacobi_unsigned( uint64_t a, uint64_t b ) {
 
   return 1 - 2 * ( bit & 1 );
 }
-}
 
 static inline void *brocard( void *arguments ) {
   auto *range = static_cast<struct range_struct *>( arguments );
