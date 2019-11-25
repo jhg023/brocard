@@ -122,7 +122,13 @@ static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_
   return factorial % prime;
 }
 
-static inline int jacobi_unsigned( uint64_t a, uint64_t b ) {
+// A modified version of the jacobi symbol (a/b).
+// Returns 0 if 'a == b' or '(a/b) == 1', and 1 if '(a/b) == -1'.
+static inline int jacobi_modified( uint64_t a, uint64_t b ) {
+  if ( __builtin_expect( a == b, 0 ) ) {
+    return 0;
+  }
+
   b >>= 1;
 
   int c = __builtin_ctzll( a );
@@ -146,7 +152,7 @@ static inline int jacobi_unsigned( uint64_t a, uint64_t b ) {
     a >>= c;
   } while( b != 0 );
 
-  return 1 - ( ( bit & 1 ) << 1 );
+  return bit & 1;
 }
 
 static inline void *brocard( void *arguments ) {
@@ -165,7 +171,7 @@ static inline void *brocard( void *arguments ) {
     i = start - 1;
   }
 
-  int best_i = 25, i, result;
+  uint best_i = 25, i, result;
   uint64_t n, prime, pinv;
 
   for( n = start; n <= end; ++n ) {
@@ -183,9 +189,9 @@ static inline void *brocard( void *arguments ) {
 
       last_n[i] = n;
 
-      result = jacobi_unsigned( factorials[i] + 1, prime );
+      result = jacobi_modified( factorials[i] + 1, prime );
 
-      if( result == -1 ) {
+      if( result ) {
         break;
       }
     }
