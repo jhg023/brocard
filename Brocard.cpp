@@ -125,10 +125,8 @@ static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_
 static inline int jacobi_unsigned( uint64_t a, uint64_t b ) {
   b >>= 1;
 
-  int bit = 0;
   int c = __builtin_ctzll( a );
-
-  bit ^= c & ( b ^ ( b >> 1 ) );
+  int bit = c & ( b ^ ( b >> 1 ) );
   
   a >>= c;
   a >>= 1;
