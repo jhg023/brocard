@@ -165,44 +165,31 @@ static inline void *brocard( void *arguments ) {
   const uint64_t *primes = range->primes;
   const uint64_t *pinvs = range->pinvs;
 
-  uint64_t last_n[NUM_PRIMES] = { 0 };
-
-  for( uint64_t &i: last_n ) {
-    i = start - 1;
-  }
-
-  uint best_i = 25, i, result;
+  int current_i;
+  uint best_i = 25, i;
   uint64_t n, prime, pinv;
 
   for( n = start; n <= end; ++n ) {
+    current_i = -1;
+
     for( i = 0; i < NUM_PRIMES; ++i ) {
       prime = primes[i];
       pinv = pinvs[i];
 
-      if( n - last_n[i] <= MULMOD_DIFFERENCE ) { // Allow for underflow
-        for( uint64_t j = last_n[i] + 1; j <= n; ++j ) {
-          factorials[i] = mulmod_preinv( factorials[i], j, prime, pinv );
-        }
-      } else {
-        factorials[i] = initialize_factorial( n, prime, pinv );
-      }
+      factorials[i] = mulmod_preinv( factorials[i], n, prime, pinv );
 
-      last_n[i] = n;
-
-      result = jacobi_modified( factorials[i] + 1, prime );
-
-      if( result ) {
-        break;
+      if( current_i < 0 && jacobi_modified( factorials[i] + 1, prime ) ) {
+        current_i = i;
       }
     }
 
-    if( __builtin_expect( i == NUM_PRIMES, 0 ) ) {
+    if( __builtin_expect( current_i == -1, 0 ) ) {
       printf( "[Sub Range #%d] Potential Solution: %llu, primes[0] = %llu, factorials[0] = %llu\n", tid, n, primes[0], factorials[0] );
       FILE *fp = fopen( SOLUTION_FILE_NAME, "ae" );
       fprintf( fp, "%llu\n", n );
       fclose( fp );
-    } else if( __builtin_expect( i >= best_i, 0 ) ) {
-      best_i = i;
+    } else if( __builtin_expect( current_i >= best_i, 0 ) ) {
+      best_i = current_i;
       printf( "[Sub Range #%d] Progress: %llu (%.2f%%), Tests Passed: %d\n", tid, n, 100.0 * tid / NUM_SUB_RANGES, best_i );
     } else if( __builtin_expect( n % MILESTONE == 0, 0 ) ) {
       printf( "[Sub Range #%d] Progress: %llu (%.2f%%)\n", tid, n, 100.0 * tid / NUM_SUB_RANGES );
