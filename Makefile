@@ -1,4 +1,4 @@
-CXXFLAGS=-std=c++17 -march=native -mtune=native -fomit-frame-pointer -fno-stack-protector -fno-rtti -flto
+CXXFLAGS=-std=c++17 -march=native -mtune=native -fomit-frame-pointer -fno-stack-protector -fno-rtti -flto -I/usr/local/include -L/usr/local/lib
 
 all: brocard bench test
 

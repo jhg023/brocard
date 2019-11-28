@@ -2,6 +2,7 @@
 #include <flint/nmod_vec.h>
 #include <flint/nmod_poly.h>
 #include <flint/ulong_extras.h>
+#include <immintrin.h>
 #include <unistd.h>
 #include <cstdint>
 
@@ -16,27 +17,58 @@ constexpr uint64_t MILESTONE = 100'000'000;
 // avoid running out of memory.
 constexpr int FACTORIAL_NUM_THREADS = 8;
 
-// The name of the file to write potential solutions to.
-#define SOLUTION_FILE_NAME "brocard_solutions.txt"
-
 // The number of primes to use when testing.
 constexpr int NUM_PRIMES = 40;
+
+// The amount of '__m256i' elements in the array of primes.
+// If using AVX512, this value should be 'NUM_PRIMES / 8'.
+constexpr int NUM_PRIMES_VECTORIZED = NUM_PRIMES / 4;
 
 // The amount of sub-ranges that the range (ENDING_N - STARTING_N) should be partitioned into.
 constexpr int NUM_SUB_RANGES = 32;
 
-// If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
-// to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
-constexpr int MULMOD_DIFFERENCE = 3'000'000;
+#define LOW_32_BITS_256 = _mm256_set1_epi64x( 0x00000000FFFFFFFFULL );
+
+// The name of the file to write potential solutions to.
+#define SOLUTION_FILE_NAME "brocard_solutions.txt"
 
 struct range_struct {
   int tid;
   uint64_t start;
   uint64_t end;
-  uint64_t *factorials;
-  const uint64_t *primes;
-  const uint64_t *pinvs;
+  __m256i *factorial_vectors;
+  const __m256i *prime_vectors;
+  const __m256i *pinv_vectors;
 };
+
+static inline auto mulmod( __m256i a, uint64_t b, __m256i m ) -> __m256i {
+  __m256i d = _mm256_setzero_si256();
+  __m256i b_vector = _mm256_set1_epi64x( b );
+  __m256i mp2 = _mm256_srli_epi64( m, 1 );
+
+  __m256i high_bit = _mm256_set1_epi64x( 0x8000000000000000ULL );
+
+  for ( int i = 0; i < 64; ++i ) {
+    __m256i d_mp2_gt = _mm256_cmpgt_epi64( d, mp2 );
+    d = _mm256_slli_epi64( d, 1 );
+    __m256i d_sub_m = _mm256_sub_epi64( d, m );
+    d = _mm256_blendv_pd( d, d_sub_m, d_mp2_gt );
+    
+    __m256i a_high_bit = _mm256_and_si256( a, high_bit );
+    __m256i d_add = _mm256_add_epi64( d, b_vector );
+    d = _mm256_blendv_pd( d, d_add, a_high_bit );
+
+    __m256i gt = _mm256_cmpgt_epi64( d, m );
+    __m256i eq = _mm256_cmpeq_epi64( d, m );
+    __m256i gt_eq = _mm256_or_si256( gt, eq );
+    __m256i d_sub = _mm256_sub_epi64( d, m );
+    d = _mm256_blendv_pd( d, d_sub, gt_eq );
+
+    a = _mm256_slli_epi64( a, 1 );
+  }
+  
+  return d;
+}
 
 static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, uint64_t ninv ) {
   const int norm = __builtin_clzll( n );
@@ -106,20 +138,38 @@ static inline uint64_t factorial_fast_mod2_preinv( uint64_t n, uint64_t p, uint6
   return r;
 }
 
-static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_t pinv ) {
-  if( n < ( prime >> 1 ) ) {
-    return factorial_fast_mod2_preinv( n, prime, pinv );
+static inline __m256i initialize_factorial( uint64_t n, __m256i prime_vector, __m256i pinv_vector ) {
+  uint64_t primes[4];
+  uint64_t pinvs[4];
+
+  // Extract the primes from the vector and store them in 'primes'.
+  _mm256_storeu_si256( ( __m256i* ) primes, prime_vector );
+
+  // Extract the inverted limbs from the vector and store them in 'pinvs'.
+  _mm256_storeu_si256( ( __m256i* ) pinvs, pinv_vector );
+
+  uint64_t factorials[4];
+
+  for( int i = 0; i < 4; ++i ) {
+    uint64_t prime = primes[i];
+    uint64_t pinv = pinvs[i];
+
+    if( n < ( prime >> 1 ) ) {
+      factorials[i] = factorial_fast_mod2_preinv( n, prime, pinv );
+    } else {
+      uint64_t factorial = factorial_fast_mod2_preinv( prime - n - 1, prime, pinv );
+
+      factorial = n_invmod( factorial, prime );
+
+      if( ( n & 1 ) == 0 ) {
+        factorial = -factorial + prime;
+      }
+
+      factorials[i] = factorial % prime;
+    }
   }
 
-  uint64_t factorial = factorial_fast_mod2_preinv( prime - n - 1, prime, pinv );
-
-  factorial = n_invmod( factorial, prime );
-
-  if( ( n & 1 ) == 0 ) {
-    factorial = -factorial + prime;
-  }
-
-  return factorial % prime;
+  return _mm256_set_epi64x( factorials[3], factorials[2], factorials[1], factorials[0] );
 }
 
 // A modified version of the jacobi symbol (a/b).
@@ -161,30 +211,27 @@ static inline void *brocard( void *arguments ) {
   const int tid = range->tid;
   const uint64_t start = range->start;
   const uint64_t end = range->end;
-  uint64_t *factorials = range->factorials;
-  const uint64_t *primes = range->primes;
-  const uint64_t *pinvs = range->pinvs;
+  __m256i *factorial_vectors = range->factorial_vectors;
+  const __m256i *prime_vectors = range->prime_vectors;
+  const __m256i *pinv_vectors = range->pinv_vectors;
 
   int current_i;
   uint best_i = 25, i;
-  uint64_t n, prime, pinv;
+  uint64_t n;
 
   for( n = start; n <= end; ++n ) {
     current_i = -1;
 
-    for( i = 0; i < NUM_PRIMES; ++i ) {
-      prime = primes[i];
-      pinv = pinvs[i];
+    for( i = 0; i < NUM_PRIMES_VECTORIZED; ++i ) {
+      factorial_vectors[i] = mulmod( factorial_vectors[i], n, prime_vectors[i] );
 
-      factorials[i] = mulmod_preinv( factorials[i], n, prime, pinv );
-
-      if( current_i < 0 && jacobi_modified( factorials[i] + 1, prime ) ) {
+      if( current_i < 0 && jacobi_modified( factorial_vectors[i] + 1, prime_vectors[i] ) ) {
         current_i = i;
       }
     }
 
     if( __builtin_expect( current_i == -1, 0 ) ) {
-      printf( "[Sub Range #%d] Potential Solution: %llu, primes[0] = %llu, factorials[0] = %llu\n", tid, n, primes[0], factorials[0] );
+      printf( "[Sub Range #%d] Potential Solution: %llu\n", tid, n );
       FILE *fp = fopen( SOLUTION_FILE_NAME, "ae" );
       fprintf( fp, "%llu\n", n );
       fclose( fp );
@@ -201,32 +248,53 @@ static inline void *brocard( void *arguments ) {
 }
 
 /**
- * Generates and returns the first 'num_primes' primes after 'start' as a pointer.
+ * Generates and returns an array of size 'NUM_PRIMES_VECTORIZED', containing vectors.
+ * Each element (vector) contains four packed primes of the type 'int64_t'.
  */
-auto generate_primes( uint64_t start, uint64_t num_primes ) -> uint64_t * {
+auto generate_primes( uint64_t start ) -> __m256i * {
   n_primes_t iter;
   n_primes_init( iter );
   n_primes_jump_after( iter, start );
 
-  auto *primes = static_cast<uint64_t *>( calloc( num_primes, sizeof( uint64_t ) ) );
+  auto *prime_vectors = static_cast<__m256i *>( calloc( NUM_PRIMES_VECTORIZED, sizeof( __m256i ) ) );
 
-  for( uint64_t i = 0; i < num_primes; ++i ) {
-    primes[i] = n_primes_next( iter );
+  for( int i = 0; i < NUM_PRIMES_VECTORIZED; ++i ) {
+    uint64_t primes[4];
+
+    for ( int j = 0; j < 4; ++j ) {
+      primes[j] = n_primes_next( iter );
+    }
+
+    // Pack the primes into a vector.
+    prime_vectors[i] = _mm256_set_epi64x( primes[3], primes[2], primes[1], primes[0] );
   }
 
   n_primes_clear( iter );
 
-  return primes;
+  return prime_vectors;
 }
 
-auto generate_pinvs( const uint64_t *primes, uint64_t num_primes ) -> uint64_t * {
-  auto *pinvs = static_cast<uint64_t *>( calloc( num_primes, sizeof( uint64_t ) ) );
+auto generate_pinvs( const __m256i *prime_vectors ) -> __m256i * {
+  auto *pinv_vectors = static_cast<__m256i *>( calloc( NUM_PRIMES_VECTORIZED, sizeof( __m256i ) ) );
 
-  for( uint64_t i = 0; i < num_primes; ++i ) {
-    pinvs[i] = n_preinvert_limb( primes[i] );
+  for( uint64_t i = 0; i < NUM_PRIMES_VECTORIZED; ++i ) {
+    __m256i prime_vector = prime_vectors[i];
+
+    uint64_t primes[4];
+   
+    // Extract the primes from the vector and store them in 'primes'.
+    _mm256_storeu_si256( ( __m256i* ) primes, prime_vector );
+
+    // Invert limbs of each prime.
+    for( uint64_t &prime: primes ) {
+      prime = n_preinvert_limb( prime );
+    }
+
+    // Pack the inverted limbs back into a vector.
+    pinv_vectors[i] = _mm256_set_epi64x( primes[3], primes[2], primes[1], primes[0] );
   }
 
-  return pinvs;
+  return pinv_vectors;
 }
 
 auto main() -> int {
@@ -243,18 +311,18 @@ auto main() -> int {
     range->tid = i;
     range->start = STARTING_N + ( i * partition_size );
     range->end = ( i == NUM_SUB_RANGES - 1 ) ? ENDING_N : range->start + partition_size - 1;
-    range->primes = generate_primes( range->end, NUM_PRIMES );
-    range->pinvs = generate_pinvs( range->primes, NUM_PRIMES );
+    range->prime_vectors = generate_primes( range->end );
+    range->pinv_vectors = generate_pinvs( range->prime_vectors );
 
-    auto *factorials = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
+    auto *factorial_vectors = static_cast<__m256i *>( calloc( NUM_PRIMES_VECTORIZED, sizeof( __m256i ) ) );
     uint64_t n = range->start - 1;
 
 #pragma omp parallel for num_threads( FACTORIAL_NUM_THREADS ) schedule( dynamic )
-    for( int i = 0; i < NUM_PRIMES; ++i ) {
-      factorials[i] = initialize_factorial( n, range->primes[i], range->pinvs[i] );
+    for( int i = 0; i < NUM_PRIMES_VECTORIZED; ++i ) {
+      factorial_vectors[i] = initialize_factorial( n, range->prime_vectors[i], range->pinv_vectors[i] );
     }
 
-    range->factorials = factorials;
+    range->factorial_vectors = factorial_vectors;
 
     ranges[i] = *range;
   }

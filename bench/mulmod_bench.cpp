@@ -2,11 +2,13 @@
 #include <cstdint>
 #include <flint/flint.h>
 #include <flint/ulong_extras.h>
+#include <immintrin.h>
 #include "../mulmod/mulmod_naive.cpp"
 #include "../mulmod/mulmod_asm.cpp"
 #include "../mulmod/mulmod_barrett.cpp"
 #include "../mulmod/mulmod14.cpp"
 #include "../mulmod/mulmod_precomp.cpp"
+#include "../mulmod/mulmod_vectorized.cpp"
 
 using celero::DoNotOptimizeAway;
 
@@ -80,7 +82,7 @@ public:
     aStart = experimentValue.Value;
     aEnd = aStart + 1'000'000;
     mStart = generate_primes( aEnd );
-    mEnd = mStart;
+    mEnd = mStart + 3;
     k = n_clog( mStart ) << 1;
     r = pow( 4, k >> 1, mStart );
     pinv = n_preinvert_limb( mStart );
@@ -142,6 +144,16 @@ BENCHMARK_F( MulmodBench, mulmod_asm, MulmodFixture, NUM_RUNS, NUM_ITERATIONS ) 
   for( uint64_t i = this->aStart; i <= this->aEnd; ++i ) {
     for( uint64_t m = this->mStart; m <= this->mEnd; ++m ) {
       DoNotOptimizeAway( result = mulmod_asm( result, i, m ) );
+    }
+  }
+}
+
+BENCHMARK_F( MulmodBench, mulmod_vectorized, MulmodFixture, NUM_RUNS, NUM_ITERATIONS ) {
+  __m256i result = _mm256_set1_epi64x( this->aStart - 1 );
+  for( uint64_t i = this->aStart; i <= this->aEnd; ++i ) {
+    for( uint64_t m = this->mStart; m <= this->mEnd; m += 4 ) {
+      __m256i m_vector = _mm256_set_epi64x( m + 3, m + 2, m + 1, m );
+      DoNotOptimizeAway( result = mulmod_vectorized( result, i, m_vector ) );
     }
   }
 }
