@@ -27,7 +27,7 @@ constexpr int NUM_SUB_RANGES = 32;
 
 // If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
-constexpr int MULMOD_DIFFERENCE = 3'000'000;
+constexpr int MULMOD_DIFFERENCE = 2'000'000;
 
 struct range_struct {
   int tid;
@@ -35,17 +35,18 @@ struct range_struct {
   uint64_t end;
   uint64_t *factorials;
   const uint64_t *primes;
+  const int *norms;
+  const uint64_t *primes_shifted;
   const uint64_t *pinvs;
 };
 
-static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, uint64_t ninv ) {
-  const int norm = __builtin_clzll( n );
+static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv, int norm ) {
+  uint64_t a_hi, a_lo;
 
-  n <<= norm;
+  umul_ppmm( a_hi, a_lo, a, b );
+  
   a_hi <<= norm;
 
-  // We don't need r_shift, as 'norm' will never be 0
-  //const uint64_t u1 = a_hi + r_shift( a_lo, FLINT_BITS - norm );
   const uint64_t u1 = a_hi + ( a_lo >> ( FLINT_BITS - norm ) );
   const uint64_t u0 = ( a_lo << norm );
 
@@ -57,12 +58,6 @@ static inline uint64_t ll_mod_preinv( uint64_t a_hi, uint64_t a_lo, uint64_t n, 
   uint64_t r = ( u0 - ( q1 + 1 ) * n ) + n;
 
   return ( r < n ) ? r >> norm : ( r - n ) >> norm;
-}
-
-static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv ) {
-  uint64_t p1, p2;
-  umul_ppmm( p1, p2, a, b );
-  return ll_mod_preinv( p1, p2, n, ninv );
 }
 
 static inline uint64_t factorial_fast_mod2_preinv( uint64_t n, uint64_t p, uint64_t pinv ) {
@@ -93,11 +88,11 @@ static inline uint64_t factorial_fast_mod2_preinv( uint64_t n, uint64_t p, uint6
   r = 1;
   for( i = 0; i < m; i++ )
     //r = n_mulmod2_preinv(r, v[i], mod.n, mod.ninv);
-    r = mulmod_preinv( r, v[i], mod.n, mod.ninv );
+    r = n_mulmod2_preinv( r, v[i], mod.n, mod.ninv );
 
   for( s = m * m + 1; s <= n; s++ )
     //r = n_mulmod2_preinv(r, s, mod.n, mod.ninv);
-    r = mulmod_preinv( r, s, mod.n, mod.ninv );
+    r = n_mulmod2_preinv( r, s, mod.n, mod.ninv );
 
   _nmod_vec_clear( t );
   _nmod_vec_clear( u );
@@ -163,6 +158,8 @@ static inline void *brocard( void *arguments ) {
   const uint64_t end = range->end;
   uint64_t *factorials = range->factorials;
   const uint64_t *primes = range->primes;
+  const int *norms = range->norms;
+  const uint64_t *primes_shifted = range->primes_shifted;
   const uint64_t *pinvs = range->pinvs;
 
   uint64_t last_n[NUM_PRIMES] = { 0 };
@@ -171,17 +168,20 @@ static inline void *brocard( void *arguments ) {
     i = start - 1;
   }
 
+  int norm;
   uint best_i = 25, i, result;
-  uint64_t n, prime, pinv;
+  uint64_t n, prime, prime_shifted, pinv;
 
   for( n = start; n <= end; ++n ) {
     for( i = 0; i < NUM_PRIMES; ++i ) {
       prime = primes[i];
+      norm = norms[i];
+      prime_shifted = primes_shifted[i];
       pinv = pinvs[i];
 
       if( n - last_n[i] <= MULMOD_DIFFERENCE ) { // Allow for underflow
         for( uint64_t j = last_n[i] + 1; j <= n; ++j ) {
-          factorials[i] = mulmod_preinv( factorials[i], j, prime, pinv );
+          factorials[i] = mulmod_preinv( factorials[i], j, prime_shifted, pinv, norm );
         }
       } else {
         factorials[i] = initialize_factorial( n, prime, pinv );
@@ -214,16 +214,16 @@ static inline void *brocard( void *arguments ) {
 }
 
 /**
- * Generates and returns the first 'num_primes' primes after 'start' as a pointer.
+ * Generates and returns the first 'NUM_PRIMES' primes after 'start' as a pointer.
  */
-auto generate_primes( uint64_t start, uint64_t num_primes ) -> uint64_t * {
+auto generate_primes( uint64_t start ) -> uint64_t * {
   n_primes_t iter;
   n_primes_init( iter );
   n_primes_jump_after( iter, start );
 
-  auto *primes = static_cast<uint64_t *>( calloc( num_primes, sizeof( uint64_t ) ) );
+  auto *primes = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
 
-  for( uint64_t i = 0; i < num_primes; ++i ) {
+  for( int i = 0; i < NUM_PRIMES; ++i ) {
     primes[i] = n_primes_next( iter );
   }
 
@@ -232,10 +232,30 @@ auto generate_primes( uint64_t start, uint64_t num_primes ) -> uint64_t * {
   return primes;
 }
 
-auto generate_pinvs( const uint64_t *primes, uint64_t num_primes ) -> uint64_t * {
-  auto *pinvs = static_cast<uint64_t *>( calloc( num_primes, sizeof( uint64_t ) ) );
+auto generate_norms( const uint64_t *primes ) -> int * {
+  auto *norms = static_cast<int *>( calloc( NUM_PRIMES, sizeof( int ) ) );
 
-  for( uint64_t i = 0; i < num_primes; ++i ) {
+  for ( int i = 0; i < NUM_PRIMES; ++i ) {
+    norms[i] = __builtin_clzll( primes[i] );
+  }
+
+  return norms;
+}
+
+auto shift_primes( const uint64_t *primes, const int *norms ) -> uint64_t * {
+  auto *primes_shifted = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
+
+  for ( int i = 0; i < NUM_PRIMES; ++i ) {
+    primes_shifted[i] = primes[i] << norms[i];
+  }
+
+  return primes_shifted;
+}
+
+auto generate_pinvs( const uint64_t *primes ) -> uint64_t * {
+  auto *pinvs = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
+
+  for( int i = 0; i < NUM_PRIMES; ++i ) {
     pinvs[i] = n_preinvert_limb( primes[i] );
   }
 
@@ -256,8 +276,10 @@ auto main() -> int {
     range->tid = i;
     range->start = STARTING_N + ( i * partition_size );
     range->end = ( i == NUM_SUB_RANGES - 1 ) ? ENDING_N : range->start + partition_size - 1;
-    range->primes = generate_primes( range->end, NUM_PRIMES );
-    range->pinvs = generate_pinvs( range->primes, NUM_PRIMES );
+    range->primes = generate_primes( range->end );
+    range->norms = generate_norms( range->primes );
+    range->primes_shifted = shift_primes( range->primes, range->norms );
+    range->pinvs = generate_pinvs( range->primes );
 
     auto *factorials = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
     uint64_t n = range->start - 1;
