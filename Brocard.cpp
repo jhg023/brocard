@@ -128,19 +128,17 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
 
   int c = __builtin_ctzll( a );
   int bit = c & ( b ^ ( b >> 1 ) );
-  
+
   a >>= c;
   a >>= 1;
 
   int64_t t;
-  uint64_t bgta;
 
   do {
     t = a - b;
-    bgta = t >> 63;
-    bit ^= ( bgta & a & b );
-    b += ( bgta & t );
-    a = ( t ^ bgta ) - bgta;
+    bit ^= ( t >= 0 ? 0 : a & b );
+    b = ( t >= 0 ? b : a );
+    a = ( t >= 0 ? t : -t );
     c = __builtin_ctzll( t );
     ++c;
     bit ^= c & ( b ^ ( b >> 1 ) );
