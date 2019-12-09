@@ -6,7 +6,7 @@
 #include <cstdint>
 
 constexpr uint64_t STARTING_N = 1;
-constexpr uint64_t ENDING_N = 1'000'000'000;
+constexpr uint64_t ENDING_N = 1'000'000'000ULL;
 
 // Milestone used for printing progress
 constexpr uint64_t MILESTONE = 100'000'000;
@@ -41,18 +41,22 @@ struct range_struct {
 };
 
 static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv, int norm ) {
-  uint64_t a_hi, a_lo;
-
-  umul_ppmm( a_hi, a_lo, a, b );
+  unsigned __int128 prod =  a * ( unsigned __int128 ) b;
   
+  uint64_t a_hi = prod >> 64;
+  uint64_t a_lo = prod & 0xFFFFFFFFFFFFFFFFULL;
+
   a_hi <<= norm;
 
+  // We don't need r_shift, as 'norm' will never be 0
+  //const uint64_t u1 = a_hi + r_shift( a_lo, FLINT_BITS - norm );
   const uint64_t u1 = a_hi + ( a_lo >> ( FLINT_BITS - norm ) );
   const uint64_t u0 = ( a_lo << norm );
 
-  uint64_t q0, q1;
+  prod = ninv * ( unsigned __int128 ) u1;
+  uint64_t q1 = prod >> 64;
+  uint64_t q0 = prod & 0xFFFFFFFFFFFFFFFFULL;
 
-  umul_ppmm( q1, q0, ninv, u1 );
   add_ssaaaa( q1, q0, q1, q0, u1, u0 );
 
   uint64_t r = ( u0 - ( q1 + 1 ) * n ) + n;
@@ -219,7 +223,7 @@ auto generate_primes( uint64_t start ) -> uint64_t * {
   n_primes_init( iter );
   n_primes_jump_after( iter, start );
 
-  auto *primes = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
+  uint64_t *primes = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
 
   for( int i = 0; i < NUM_PRIMES; ++i ) {
     primes[i] = n_primes_next( iter );
