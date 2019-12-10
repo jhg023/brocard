@@ -44,22 +44,20 @@ static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64
   unsigned __int128 prod =  a * ( unsigned __int128 ) b;
   
   uint64_t a_hi = prod >> 64;
-  uint64_t a_lo = prod & 0xFFFFFFFFFFFFFFFFULL;
+  uint64_t a_lo = ( uint64_t ) prod;
 
   a_hi <<= norm;
 
   // We don't need r_shift, as 'norm' will never be 0
   //const uint64_t u1 = a_hi + r_shift( a_lo, FLINT_BITS - norm );
-  const uint64_t u1 = a_hi + ( a_lo >> ( FLINT_BITS - norm ) );
+  const unsigned __int128 u1 = a_hi + ( a_lo >> ( FLINT_BITS - norm ) );
   const uint64_t u0 = ( a_lo << norm );
 
-  prod = ninv * ( unsigned __int128 ) u1;
-  uint64_t q1 = prod >> 64;
-  uint64_t q0 = prod & 0xFFFFFFFFFFFFFFFFULL;
+  unsigned __int128 u = u1 << 64 | u0;
 
-  add_ssaaaa( q1, q0, q1, q0, u1, u0 );
+  prod = ( ( ninv * u1 ) + u ) >> 64;
 
-  uint64_t r = ( u0 - ( q1 + 1 ) * n ) + n;
+  uint64_t r = ( u0 - ( prod + 1 ) * n ) + n;
 
   return ( r < n ) ? r >> norm : ( r - n ) >> norm;
 }
