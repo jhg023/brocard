@@ -41,19 +41,17 @@ struct range_struct {
 };
 
 static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv, int norm ) {
-  unsigned __int128 prod =  a * ( unsigned __int128 ) b;
+  __uint128_t prod = ( __uint128_t ) a * b;
   
   uint64_t a_hi = prod >> 64;
   uint64_t a_lo = ( uint64_t ) prod;
 
   a_hi <<= norm;
 
-  // We don't need r_shift, as 'norm' will never be 0
-  //const uint64_t u1 = a_hi + r_shift( a_lo, FLINT_BITS - norm );
-  const unsigned __int128 u1 = a_hi + ( a_lo >> ( FLINT_BITS - norm ) );
+  const __uint128_t u1 = a_hi + ( a_lo >> ( FLINT_BITS - norm ) );
   const uint64_t u0 = ( a_lo << norm );
 
-  unsigned __int128 u = u1 << 64 | u0;
+  __uint128_t u = u1 << 64 | u0;
 
   prod = ( ( ninv * u1 ) + u ) >> 64;
 
@@ -129,7 +127,7 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
   b >>= 1;
 
   int c = __builtin_ctzll( a );
-  int bit = c & ( b ^ ( b >> 1 ) );
+  uint64_t bit = c & ( b ^ ( b >> 1 ) ), temp;
 
   a >>= c;
   a >>= 1;
@@ -138,13 +136,19 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
 
   do {
     t = a - b;
-    bit ^= ( t >= 0 ? 0 : a & b );
-    b = ( t >= 0 ? b : a );
-    a = ( t >= 0 ? t : -t );
-    c = __builtin_ctzll( t );
-    ++c;
+
+    /* If b > a, invoke reciprocity */
+    bit ^= ( a >= b ? 0 : a & b );
+
+    /* b <-- min (a, b) */
+    b = b ^ ( ( a ^ b ) & -( a < b ) );
+
+    c = __builtin_ctzll( t ) + 1;
+
+    /* a <-- |a - b| */
+    a = ( ( t < 0 ) ? -t : t ) >> c; 
+
     bit ^= c & ( b ^ ( b >> 1 ) );
-    a >>= c;
   } while( b != 0 );
 
   return bit & 1;
