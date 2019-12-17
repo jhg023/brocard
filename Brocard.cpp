@@ -119,6 +119,7 @@ static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_
 
 // A modified version of the jacobi symbol (a/b).
 // Returns 0 if 'a == b' or '(a/b) == 1', and 1 if '(a/b) == -1'.
+// Assertions: a <= b, b is an odd prime
 static inline int jacobi_modified( uint64_t a, uint64_t b ) {
   if ( __builtin_expect( a == b, 0 ) ) {
     return 0;
@@ -127,7 +128,7 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
   b >>= 1;
 
   int c = __builtin_ctzll( a );
-  uint64_t bit = c & ( b ^ ( b >> 1 ) ), temp;
+  uint64_t bit = c & ( b ^ ( b >> 1 ) );
 
   a >>= c;
   a >>= 1;
@@ -135,20 +136,23 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
   int64_t t;
 
   do {
-    t = a - b;
+    #pragma unroll(3)
+    for ( int i = 0; i < 3; ++i ) {
+      t = a - b;
 
-    /* If b > a, invoke reciprocity */
-    bit ^= ( a >= b ? 0 : a & b );
+      /* If b > a, invoke reciprocity */
+      bit ^= ( a >= b ? 0 : a & b );
 
-    /* b <-- min (a, b) */
-    b = b ^ ( ( a ^ b ) & -( a < b ) );
+      /* b <-- min (a, b) */
+      b = ( a < b ) ? a : b;
 
-    c = __builtin_ctzll( t ) + 1;
+      c = __builtin_ctzll( t ) + 1;
 
-    /* a <-- |a - b| */
-    a = ( ( t < 0 ) ? -t : t ) >> c; 
+      /* a <-- |a - b| */
+      a = ( ( t < 0 ) ? -t : t ) >> c;
 
-    bit ^= c & ( b ^ ( b >> 1 ) );
+      bit ^= c & ( b ^ ( b >> 1 ) );
+    }
   } while( b != 0 );
 
   return bit & 1;
