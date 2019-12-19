@@ -4,9 +4,10 @@
 #include <flint/ulong_extras.h>
 #include <unistd.h>
 #include <cstdint>
+#include <immintrin.h>
 
 constexpr uint64_t STARTING_N = 1;
-constexpr uint64_t ENDING_N = 1'000'000'000ULL;
+constexpr uint64_t ENDING_N = 10'000'000'000ULL;
 
 // Milestone used for printing progress
 constexpr uint64_t MILESTONE = 100'000'000;
@@ -23,7 +24,7 @@ constexpr int FACTORIAL_NUM_THREADS = 8;
 constexpr int NUM_PRIMES = 40;
 
 // The amount of sub-ranges that the range (ENDING_N - STARTING_N) should be partitioned into.
-constexpr int NUM_SUB_RANGES = 32;
+constexpr int NUM_SUB_RANGES = ( ENDING_N - STARTING_N ) / 39'062'500;
 
 // If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
@@ -141,12 +142,12 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
       t = a - b;
 
       /* If b > a, invoke reciprocity */
-      bit ^= ( a >= b ? 0 : a & b );
+      bit ^= ( a & ( a >= b ? 0 : b ) );
 
       /* b <-- min (a, b) */
       b = ( a < b ) ? a : b;
 
-      c = __builtin_ctzll( t ) + 1;
+      c = _tzcnt_u64( t ) + 1;
 
       /* a <-- |a - b| */
       a = ( ( t < 0 ) ? -t : t ) >> c;
