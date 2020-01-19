@@ -141,8 +141,8 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
   int64_t t;
 
   do {
-    #pragma unroll( 1 )
-    for ( int i = 0; i < 1; ++i ) {
+    #pragma unroll( 3 )
+    for ( int i = 0; i < 3; ++i ) {
       t = a - b;
 
       /* If b > a, invoke reciprocity */
