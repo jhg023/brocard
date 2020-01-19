@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <immintrin.h>
 
-constexpr uint64_t STARTING_N = 1;
-constexpr uint64_t ENDING_N = 10'000'000'000ULL;
+constexpr uint64_t STARTING_N = 1ULL;
+constexpr uint64_t ENDING_N = 50'000'000'000ULL;
 
 // Milestone used for printing progress
 constexpr uint64_t MILESTONE = 100'000'000;
@@ -21,10 +21,10 @@ constexpr int FACTORIAL_NUM_THREADS = 8;
 #define SOLUTION_FILE_NAME "brocard_solutions.txt"
 
 // The number of primes to use when testing.
-constexpr int NUM_PRIMES = 40;
+constexpr int NUM_PRIMES = 50;
 
 // The amount of sub-ranges that the range (ENDING_N - STARTING_N) should be partitioned into.
-constexpr int NUM_SUB_RANGES = ( ENDING_N - STARTING_N ) / 39'062'500;
+constexpr int NUM_SUB_RANGES = ( ENDING_N - STARTING_N ) / 39'062'500ULL;
 
 // If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
@@ -76,24 +76,28 @@ static inline uint64_t factorial_fast_mod2_preinv( uint64_t n, uint64_t p, uint6
   v = _nmod_vec_init( m + 1 );
 
   t[0] = UWORD( 0 );
-  for( i = 1; i < m; i++ )
+
+  for( i = 1; i < m; ++i ) {
     t[i] = n_submod( t[i - 1], UWORD( 1 ), p );
+  }
 
   _nmod_poly_product_roots_nmod_vec( u, t, m, mod );
 
-  for( i = 0; i < m; i++ )
+  for( i = 0; i < m; ++i ) {
     t[i] = n_mod2_preinv( i * m + 1, p, pinv );
+  }
 
   _nmod_poly_evaluate_nmod_vec_fast( v, u, m + 1, t, m, mod );
 
   r = 1;
-  for( i = 0; i < m; i++ )
-    //r = n_mulmod2_preinv(r, v[i], mod.n, mod.ninv);
-    r = n_mulmod2_preinv( r, v[i], mod.n, mod.ninv );
 
-  for( s = m * m + 1; s <= n; s++ )
-    //r = n_mulmod2_preinv(r, s, mod.n, mod.ninv);
+  for( i = 0; i < m; ++i ) {
+    r = n_mulmod2_preinv( r, v[i], mod.n, mod.ninv );
+  }
+
+  for( s = m * m + 1; s <= n; ++s ) {
     r = n_mulmod2_preinv( r, s, mod.n, mod.ninv );
+  }
 
   _nmod_vec_clear( t );
   _nmod_vec_clear( u );
@@ -137,17 +141,17 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
   int64_t t;
 
   do {
-    #pragma unroll(3)
-    for ( int i = 0; i < 3; ++i ) {
+    #pragma unroll( 1 )
+    for ( int i = 0; i < 1; ++i ) {
       t = a - b;
 
       /* If b > a, invoke reciprocity */
       bit ^= ( a & ( a >= b ? 0 : b ) );
 
       /* b <-- min (a, b) */
-      b = ( a < b ) ? a : b;
+      b = a < b ? a : b;
 
-      c = _tzcnt_u64( t ) + 1;
+      c = __builtin_ctzll( t ) + 1;
 
       /* a <-- |a - b| */
       a = ( ( t < 0 ) ? -t : t ) >> c;
@@ -178,7 +182,7 @@ static inline void *brocard( void *arguments ) {
   }
 
   int norm;
-  uint best_i = 25, i, result;
+  uint best_i = 30, i, result;
   uint64_t n, prime, prime_shifted, pinv;
 
   for( n = start; n <= end; ++n ) {
