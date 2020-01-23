@@ -1,13 +1,13 @@
+#include <cstdint>
 #include <flint/flint.h>
 #include <flint/nmod_vec.h>
 #include <flint/nmod_poly.h>
 #include <flint/ulong_extras.h>
+#include <locale.h>
 #include <unistd.h>
-#include <cstdint>
-#include <immintrin.h>
 
 constexpr uint64_t STARTING_N = 1ULL;
-constexpr uint64_t ENDING_N = 50'000'000'000ULL;
+constexpr uint64_t ENDING_N = 5'000'000'000ULL;
 
 // Milestone used for printing progress
 constexpr uint64_t MILESTONE = 100'000'000;
@@ -15,33 +15,37 @@ constexpr uint64_t MILESTONE = 100'000'000;
 // The number of threads to use when computing the initial factorial values.
 // This is a memory hog, so a small amount of threads should be used here to
 // avoid running out of memory.
-constexpr int FACTORIAL_NUM_THREADS = 8;
+constexpr uint FACTORIAL_NUM_THREADS = 8;
 
 // The name of the file to write potential solutions to.
 #define SOLUTION_FILE_NAME "brocard_solutions.txt"
 
 // The number of primes to use when testing.
-constexpr int NUM_PRIMES = 50;
+// 
+// 30 = 1 in 1 billion of finding a potential solution
+// 40 = 1 in 1 trillion of finding a potential solution
+// 50 = 1 in 1 quadrillion of finding a potential solution
+constexpr uint NUM_PRIMES = 50;
 
 // The amount of sub-ranges that the range (ENDING_N - STARTING_N) should be partitioned into.
-constexpr int NUM_SUB_RANGES = ( ENDING_N - STARTING_N ) / 39'062'500ULL;
+constexpr uint NUM_SUB_RANGES = ( ENDING_N - STARTING_N ) / 39'062'500ULL;
 
 // If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
-constexpr int MULMOD_DIFFERENCE = 2'000'000;
+constexpr uint MULMOD_DIFFERENCE = 2'000'000;
 
 struct range_struct {
-  int tid;
+  uint tid;
   uint64_t start;
   uint64_t end;
   uint64_t *factorials;
   const uint64_t *primes;
-  const int *norms;
+  const uint64_t *norms;
   const uint64_t *primes_shifted;
   const uint64_t *pinvs;
 };
 
-static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv, int norm ) {
+static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv, uint64_t norm ) {
   __uint128_t prod = ( __uint128_t ) a * b;
   
   uint64_t a_hi = prod >> 64;
@@ -132,7 +136,7 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
 
   b >>= 1;
 
-  int c = __builtin_ctzll( a );
+  uint c = __builtin_ctzll( a );
   uint64_t bit = c & ( b ^ ( b >> 1 ) );
 
   a >>= c;
@@ -142,7 +146,7 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
 
   do {
     #pragma unroll( 3 )
-    for ( int i = 0; i < 3; ++i ) {
+    for ( uint i = 0; i < 3; ++i ) {
       t = a - b;
 
       /* If b > a, invoke reciprocity */
@@ -166,24 +170,23 @@ static inline int jacobi_modified( uint64_t a, uint64_t b ) {
 static inline void *brocard( void *arguments ) {
   auto *range = static_cast<struct range_struct *>( arguments );
 
-  const int tid = range->tid;
+  const uint tid = range->tid;
   const uint64_t start = range->start;
   const uint64_t end = range->end;
-  uint64_t *factorials = range->factorials;
   const uint64_t *primes = range->primes;
-  const int *norms = range->norms;
+  const uint64_t *norms = range->norms;
   const uint64_t *primes_shifted = range->primes_shifted;
   const uint64_t *pinvs = range->pinvs;
 
+  uint64_t *factorials = range->factorials;
   uint64_t last_n[NUM_PRIMES] = { 0 };
 
   for( uint64_t &i: last_n ) {
     i = start - 1;
   }
 
-  int norm;
   uint best_i = 30, i, result;
-  uint64_t n, prime, prime_shifted, pinv;
+  uint64_t n, norm, prime, prime_shifted, pinv;
 
   for( n = start; n <= end; ++n ) {
     for( i = 0; i < NUM_PRIMES; ++i ) {
@@ -210,15 +213,15 @@ static inline void *brocard( void *arguments ) {
     }
 
     if( __builtin_expect( i == NUM_PRIMES, 0 ) ) {
-      printf( "[Sub Range #%d] Potential Solution: %llu, primes[0] = %llu, factorials[0] = %llu\n", tid, n, primes[0], factorials[0] );
+      printf( "[Sub Range #%'d] Potential Solution: %'llu - primes[0] = %'llu - factorials[0] = %'llu\n", tid, n, primes[0], factorials[0] );
       FILE *fp = fopen( SOLUTION_FILE_NAME, "ae" );
-      fprintf( fp, "%llu\n", n );
+      fprintf( fp, "%'llu\n", n );
       fclose( fp );
     } else if( __builtin_expect( i >= best_i, 0 ) ) {
       best_i = i;
-      printf( "[Sub Range #%d] Progress: %llu (%.2f%%), Tests Passed: %d\n", tid, n, 100.0 * tid / NUM_SUB_RANGES, best_i );
+      printf( "[Sub Range #%'d] Progress: %'llu (%.2f%%), Tests Passed: %d\n", tid, n, 100.0 * tid / NUM_SUB_RANGES, best_i );
     } else if( __builtin_expect( n % MILESTONE == 0, 0 ) ) {
-      printf( "[Sub Range #%d] Progress: %llu (%.2f%%)\n", tid, n, 100.0 * tid / NUM_SUB_RANGES );
+      printf( "[Sub Range #%'d] Progress: %'llu (%.2f%%)\n", tid, n, 100.0 * tid / NUM_SUB_RANGES );
     }
   }
 
@@ -245,8 +248,8 @@ auto generate_primes( uint64_t start ) -> uint64_t * {
   return primes;
 }
 
-auto generate_norms( const uint64_t *primes ) -> int * {
-  auto *norms = static_cast<int *>( calloc( NUM_PRIMES, sizeof( int ) ) );
+auto generate_norms( const uint64_t *primes ) -> uint64_t * {
+  auto *norms = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
 
   for ( int i = 0; i < NUM_PRIMES; ++i ) {
     norms[i] = __builtin_clzll( primes[i] );
@@ -255,7 +258,7 @@ auto generate_norms( const uint64_t *primes ) -> int * {
   return norms;
 }
 
-auto shift_primes( const uint64_t *primes, const int *norms ) -> uint64_t * {
+auto shift_primes( const uint64_t *primes, const uint64_t *norms ) -> uint64_t * {
   auto *primes_shifted = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
 
   for ( int i = 0; i < NUM_PRIMES; ++i ) {
@@ -276,14 +279,22 @@ auto generate_pinvs( const uint64_t *primes ) -> uint64_t * {
 }
 
 auto main() -> int {
+  setlocale( LC_NUMERIC, "" );
+
   remove( SOLUTION_FILE_NAME );
 
   uint64_t partition_size = ( ENDING_N - STARTING_N ) / NUM_SUB_RANGES;
-  printf( "Partition Size: %llu\n", partition_size );
+  printf( "Number of sub-ranges: %'d\n", NUM_SUB_RANGES );
+  printf( "Size of each sub-range: %'llu\n", partition_size );
+  printf( "Beginning to calculate %'d factorials...\n", NUM_SUB_RANGES * NUM_PRIMES );
 
   struct range_struct ranges[NUM_SUB_RANGES];
 
-  for( int i = 0; i < NUM_SUB_RANGES; ++i ) {
+  for( uint i = 0; i < NUM_SUB_RANGES; ++i ) {
+    if ( i > 0 && i % 10 == 0 ) {
+      printf( "Finished calculating factorials for %'d sub-ranges out of %'d\n", i, NUM_SUB_RANGES );
+    }
+
     auto *range = static_cast<struct range_struct *>( malloc( sizeof( struct range_struct ) ) );
 
     range->tid = i;
@@ -298,7 +309,7 @@ auto main() -> int {
     uint64_t n = range->start - 1;
 
 #pragma omp parallel for num_threads( FACTORIAL_NUM_THREADS ) schedule( dynamic )
-    for( int i = 0; i < NUM_PRIMES; ++i ) {
+    for( uint i = 0; i < NUM_PRIMES; ++i ) {
       factorials[i] = initialize_factorial( n, range->primes[i], range->pinvs[i] );
     }
 
@@ -307,8 +318,10 @@ auto main() -> int {
     ranges[i] = *range;
   }
 
+  printf( "Finished calculating factorials for all %'d sub-ranges!\n", NUM_SUB_RANGES );
+
 #pragma omp parallel for schedule( dynamic )
-  for( int i = 0; i < NUM_SUB_RANGES; ++i ) {
+  for( uint i = 0; i < NUM_SUB_RANGES; ++i ) {
     brocard( &ranges[i] );
   }
 }
