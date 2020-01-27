@@ -39,10 +39,12 @@ struct range_struct {
   uint64_t start;
   uint64_t end;
   uint64_t *factorials;
-  const uint64_t *primes;
+  const uint64_t *bits;
   const uint64_t *norms;
-  const uint64_t *primes_shifted;
   const uint64_t *pinvs;
+  const uint64_t *primes;
+  const uint64_t *primes_halved;
+  const uint64_t *primes_shifted;
 };
 
 static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv, uint64_t norm ) {
@@ -129,15 +131,13 @@ static inline uint64_t initialize_factorial( uint64_t n, uint64_t prime, uint64_
 // A modified version of the jacobi symbol (a/b).
 // Returns 0 if 'a == b' or '(a/b) == 1', and 1 if '(a/b) == -1'.
 // Assertions: a <= b, b is an odd prime
-static inline int jacobi_modified( uint64_t a, uint64_t b ) {
+static inline int jacobi_modified( uint64_t a, uint64_t b, uint64_t bit ) {
   if ( __builtin_expect( a == b, 0 ) ) {
     return 0;
   }
 
-  b >>= 1;
-
   uint c = __builtin_ctzll( a );
-  uint64_t bit = c & ( b ^ ( b >> 1 ) );
+  bit &= c;
 
   a >>= c;
   a >>= 1;
@@ -173,10 +173,12 @@ static inline void *brocard( void *arguments ) {
   const uint tid = range->tid;
   const uint64_t start = range->start;
   const uint64_t end = range->end;
-  const uint64_t *primes = range->primes;
+  const uint64_t *bits = range->bits;
   const uint64_t *norms = range->norms;
-  const uint64_t *primes_shifted = range->primes_shifted;
   const uint64_t *pinvs = range->pinvs;
+  const uint64_t *primes = range->primes;
+  const uint64_t *primes_halved = range->primes_halved;
+  const uint64_t *primes_shifted = range->primes_shifted;
 
   uint64_t *factorials = range->factorials;
   uint64_t last_n[NUM_PRIMES] = { 0 };
@@ -185,12 +187,11 @@ static inline void *brocard( void *arguments ) {
     i = start - 1;
   }
 
-  uint best_i = 30, i, result;
-  uint64_t n, norm, prime, prime_shifted, pinv;
+  uint best_i = 25, i, result;
+  uint64_t n, norm, prime_shifted, pinv;
 
   for( n = start; n <= end; ++n ) {
     for( i = 0; i < NUM_PRIMES; ++i ) {
-      prime = primes[i];
       norm = norms[i];
       prime_shifted = primes_shifted[i];
       pinv = pinvs[i];
@@ -200,12 +201,12 @@ static inline void *brocard( void *arguments ) {
           factorials[i] = mulmod_preinv( factorials[i], j, prime_shifted, pinv, norm );
         }
       } else {
-        factorials[i] = initialize_factorial( n, prime, pinv );
+        factorials[i] = initialize_factorial( n, primes[i], pinv );
       }
 
       last_n[i] = n;
 
-      result = jacobi_modified( factorials[i] + 1, prime );
+      result = jacobi_modified( factorials[i] + 1, primes_halved[i], bits[i] );
 
       if( result ) {
         break;
@@ -268,6 +269,26 @@ auto shift_primes( const uint64_t *primes, const uint64_t *norms ) -> uint64_t *
   return primes_shifted;
 }
 
+auto halve_primes( const uint64_t *primes ) -> uint64_t * {
+  auto *primes_halved = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
+
+  for ( int i = 0; i < NUM_PRIMES; ++i ) {
+    primes_halved[i] = primes[i] >> 1ULL;
+  }
+
+  return primes_halved;
+}
+
+auto generate_bits( const uint64_t *halve_primes ) -> uint64_t * {
+  auto *bits = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
+
+  for ( int i = 0; i < NUM_PRIMES; ++i ) {
+    bits[i] = halve_primes[i] ^ ( halve_primes[i] >> 1 );
+  }
+
+  return bits;
+}
+
 auto generate_pinvs( const uint64_t *primes ) -> uint64_t * {
   auto *pinvs = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
 
@@ -303,6 +324,8 @@ auto main() -> int {
     range->primes = generate_primes( range->end );
     range->norms = generate_norms( range->primes );
     range->primes_shifted = shift_primes( range->primes, range->norms );
+    range->primes_halved = halve_primes( range->primes );
+    range->bits = generate_bits( range->primes_halved );
     range->pinvs = generate_pinvs( range->primes );
 
     auto *factorials = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
