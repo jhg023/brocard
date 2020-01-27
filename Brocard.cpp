@@ -43,7 +43,6 @@ struct range_struct {
   const uint64_t *norms;
   const uint64_t *pinvs;
   const uint64_t *primes;
-  const uint64_t *primes_halved;
   const uint64_t *primes_shifted;
 };
 
@@ -136,6 +135,8 @@ static inline int jacobi_modified( uint64_t a, uint64_t b, uint64_t bit ) {
     return 0;
   }
 
+  b >>= 1;
+
   uint c = __builtin_ctzll( a );
   bit &= c;
 
@@ -177,7 +178,6 @@ static inline void *brocard( void *arguments ) {
   const uint64_t *norms = range->norms;
   const uint64_t *pinvs = range->pinvs;
   const uint64_t *primes = range->primes;
-  const uint64_t *primes_halved = range->primes_halved;
   const uint64_t *primes_shifted = range->primes_shifted;
 
   uint64_t *factorials = range->factorials;
@@ -188,25 +188,26 @@ static inline void *brocard( void *arguments ) {
   }
 
   uint best_i = 25, i, result;
-  uint64_t n, norm, prime_shifted, pinv;
+  uint64_t n, norm, prime, pinv, prime_shifted;
 
   for( n = start; n <= end; ++n ) {
     for( i = 0; i < NUM_PRIMES; ++i ) {
       norm = norms[i];
-      prime_shifted = primes_shifted[i];
       pinv = pinvs[i];
+      prime = primes[i];
+      prime_shifted = primes_shifted[i];
 
       if( n - last_n[i] <= MULMOD_DIFFERENCE ) { // Allow for underflow
         for( uint64_t j = last_n[i] + 1; j <= n; ++j ) {
           factorials[i] = mulmod_preinv( factorials[i], j, prime_shifted, pinv, norm );
         }
       } else {
-        factorials[i] = initialize_factorial( n, primes[i], pinv );
+        factorials[i] = initialize_factorial( n, prime, pinv );
       }
 
       last_n[i] = n;
 
-      result = jacobi_modified( factorials[i] + 1, primes_halved[i], bits[i] );
+      result = jacobi_modified( factorials[i] + 1, prime, bits[i] );
 
       if( result ) {
         break;
@@ -269,21 +270,11 @@ auto shift_primes( const uint64_t *primes, const uint64_t *norms ) -> uint64_t *
   return primes_shifted;
 }
 
-auto halve_primes( const uint64_t *primes ) -> uint64_t * {
-  auto *primes_halved = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
-
-  for ( int i = 0; i < NUM_PRIMES; ++i ) {
-    primes_halved[i] = primes[i] >> 1ULL;
-  }
-
-  return primes_halved;
-}
-
 auto generate_bits( const uint64_t *halve_primes ) -> uint64_t * {
   auto *bits = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
 
   for ( int i = 0; i < NUM_PRIMES; ++i ) {
-    bits[i] = halve_primes[i] ^ ( halve_primes[i] >> 1 );
+    bits[i] = ( halve_primes[i] >> 1 ) ^ ( halve_primes[i] >> 2 );
   }
 
   return bits;
@@ -324,8 +315,7 @@ auto main() -> int {
     range->primes = generate_primes( range->end );
     range->norms = generate_norms( range->primes );
     range->primes_shifted = shift_primes( range->primes, range->norms );
-    range->primes_halved = halve_primes( range->primes );
-    range->bits = generate_bits( range->primes_halved );
+    range->bits = generate_bits( range->primes );
     range->pinvs = generate_pinvs( range->primes );
 
     auto *factorials = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
