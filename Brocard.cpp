@@ -7,7 +7,7 @@
 #include <unistd.h>
 
 constexpr uint64_t STARTING_N = 1ULL;
-constexpr uint64_t ENDING_N = 5'000'000'000ULL;
+constexpr uint64_t ENDING_N = 1'000'000'000ULL;
 
 // Milestone used for printing progress
 constexpr uint64_t MILESTONE = 100'000'000;
@@ -25,10 +25,10 @@ constexpr uint FACTORIAL_NUM_THREADS = 8;
 // 30 = 1 in 1 billion of finding a potential solution
 // 40 = 1 in 1 trillion of finding a potential solution
 // 50 = 1 in 1 quadrillion of finding a potential solution
-constexpr uint NUM_PRIMES = 50;
+constexpr uint NUM_PRIMES = 40;
 
 // The amount of sub-ranges that the range (ENDING_N - STARTING_N) should be partitioned into.
-constexpr uint NUM_SUB_RANGES = ( ENDING_N - STARTING_N ) / 39'062'500ULL;
+constexpr uint NUM_SUB_RANGES = 32; //( ENDING_N - STARTING_N ) / 39'062'500ULL;
 
 // If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
@@ -61,7 +61,7 @@ static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64
 
   prod = ( ( ninv * u1 ) + u ) >> 64;
 
-  uint64_t r = ( u0 - ( prod + 1 ) * n ) + n;
+  uint64_t r = ( u0 - ( ( prod + 1 ) * n ) ) + n;
 
   return ( r < n ) ? r >> norm : ( r - n ) >> norm;
 }
@@ -143,27 +143,27 @@ static inline int jacobi_modified( uint64_t a, uint64_t b, uint64_t bit ) {
   a >>= c;
   a >>= 1;
 
-  int64_t t;
-
   do {
-    #pragma unroll( 3 )
-    for ( uint i = 0; i < 3; ++i ) {
-      t = a - b;
+    #pragma unroll( 1 )
+    for ( uint i = 0; i < 1; ++i ) {
+      int64_t t = a - b;
 
       /* If b > a, invoke reciprocity */
-      bit ^= ( a & ( a >= b ? 0 : b ) );
+      bit ^= ( a >= b ? 0 : a & b );
 
       /* b <-- min (a, b) */
       b = a < b ? a : b;
 
-      c = __builtin_ctzll( t ) + 1;
-
       /* a <-- |a - b| */
-      a = ( ( t < 0 ) ? -t : t ) >> c;
+      a = ( ( t < 0 ) ? -t : t );
+
+      c = __builtin_ctzll( a ) + 1;
 
       bit ^= c & ( b ^ ( b >> 1 ) );
+
+      a >>= c;
     }
-  } while( b != 0 );
+  } while( b > 0 );
 
   return bit & 1;
 }
@@ -270,11 +270,11 @@ auto shift_primes( const uint64_t *primes, const uint64_t *norms ) -> uint64_t *
   return primes_shifted;
 }
 
-auto generate_bits( const uint64_t *halve_primes ) -> uint64_t * {
+auto generate_bits( const uint64_t *primes ) -> uint64_t * {
   auto *bits = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
 
   for ( int i = 0; i < NUM_PRIMES; ++i ) {
-    bits[i] = ( halve_primes[i] >> 1 ) ^ ( halve_primes[i] >> 2 );
+    bits[i] = ( primes[i] >> 1 ) ^ ( primes[i] >> 2 );
   }
 
   return bits;

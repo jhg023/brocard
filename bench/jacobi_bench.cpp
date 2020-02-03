@@ -72,7 +72,7 @@ public:
 BASELINE_F( JacobiBench, jacobi1, JacobiFixture, NUM_RUNS, NUM_ITERATIONS ) {
   for( uint64_t a = this->aStart; a <= this->aEnd; ++a ) {
     for( auto &&p: primes ) {
-      DoNotOptimizeAway( jacobi_modified1( a, p, 0 ) );
+      DoNotOptimizeAway( jacobi_modified1( a, p, ( p >> 1 ) ^ ( p >> 2 ) ) );
     }
   }
 }
@@ -80,7 +80,7 @@ BASELINE_F( JacobiBench, jacobi1, JacobiFixture, NUM_RUNS, NUM_ITERATIONS ) {
 BENCHMARK_F( JacobiBench, jacobi2, JacobiFixture, NUM_RUNS, NUM_ITERATIONS ) {
   for( uint64_t a = this->aStart; a <= this->aEnd; ++a ) {
     for( auto &&p: primes ) {
-      DoNotOptimizeAway( jacobi_modified2( a, p, 0 ) );
+      DoNotOptimizeAway( jacobi_modified2( a, p, ( p >> 1 ) ^ ( p >> 2 ) ) );
     }
   }
 }
@@ -88,35 +88,35 @@ BENCHMARK_F( JacobiBench, jacobi2, JacobiFixture, NUM_RUNS, NUM_ITERATIONS ) {
 BENCHMARK_F( JacobiBench, jacobi3, JacobiFixture, NUM_RUNS, NUM_ITERATIONS ) {
   for( uint64_t a = this->aStart; a <= this->aEnd; ++a ) {
     for( auto &&p: primes ) {
-      DoNotOptimizeAway( jacobi_modified3( a, p, 0 ) );
+      DoNotOptimizeAway( jacobi_modified3( a, p, ( p >> 1 ) ^ ( p >> 2 ) ) );
     }
   }
 }
 BENCHMARK_F( JacobiBench, jacobi4, JacobiFixture, NUM_RUNS, NUM_ITERATIONS ) {
   for( uint64_t a = this->aStart; a <= this->aEnd; ++a ) {
     for( auto &&p: primes ) {
-      DoNotOptimizeAway( jacobi_modified4( a, p, 0 ) );
+      DoNotOptimizeAway( jacobi_modified4( a, p, ( p >> 1 ) ^ ( p >> 2 ) ) );
     }
   }
 }
 BENCHMARK_F( JacobiBench, jacobi5, JacobiFixture, NUM_RUNS, NUM_ITERATIONS ) {
   for( uint64_t a = this->aStart; a <= this->aEnd; ++a ) {
     for( auto &&p: primes ) {
-      DoNotOptimizeAway( jacobi_modified5( a, p, 0 ) );
+      DoNotOptimizeAway( jacobi_modified5( a, p, ( p >> 1 ) ^ ( p >> 2 ) ) );
     }
   }
 }
 BENCHMARK_F( JacobiBench, jacobi6, JacobiFixture, NUM_RUNS, NUM_ITERATIONS ) {
   for( uint64_t a = this->aStart; a <= this->aEnd; ++a ) {
     for( auto &&p: primes ) {
-      DoNotOptimizeAway( jacobi_modified6( a, p, 0 ) );
+      DoNotOptimizeAway( jacobi_modified6( a, p, ( p >> 1 ) ^ ( p >> 2 ) ) );
     }
   }
 }
 BENCHMARK_F( JacobiBench, jacobi7, JacobiFixture, NUM_RUNS, NUM_ITERATIONS ) {
   for( uint64_t a = this->aStart; a <= this->aEnd; ++a ) {
     for( auto &&p: primes ) {
-      DoNotOptimizeAway( jacobi_modified7( a, p, 0 ) );
+      DoNotOptimizeAway( jacobi_modified7( a, p, ( p >> 1 ) ^ ( p >> 2 ) ) );
     }
   }
 }
