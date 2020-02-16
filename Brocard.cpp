@@ -3,6 +3,7 @@
 #include <flint/nmod_vec.h>
 #include <flint/nmod_poly.h>
 #include <flint/ulong_extras.h>
+#include <immintrin.h>
 #include <locale.h>
 #include <unistd.h>
 
@@ -32,13 +33,12 @@ constexpr uint NUM_SUB_RANGES = 32; //( ENDING_N - STARTING_N ) / 39'062'500ULL;
 
 // If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
-constexpr uint MULMOD_DIFFERENCE = 2'000'000;
+constexpr uint MULMOD_DIFFERENCE = 3'000'000;
 
 struct range_struct {
   uint tid;
   uint64_t start;
   uint64_t end;
-  uint64_t *factorials;
   const uint64_t *bits;
   const uint64_t *norms;
   const uint64_t *pinvs;
@@ -144,8 +144,8 @@ static inline int jacobi_modified( uint64_t a, uint64_t b, uint64_t bit ) {
   a >>= 1;
 
   do {
-    #pragma unroll( 1 )
-    for ( uint i = 0; i < 1; ++i ) {
+    #pragma unroll( 3 )
+    for ( uint i = 0; i < 3; ++i ) {
       int64_t t = a - b;
 
       /* If b > a, invoke reciprocity */
@@ -180,7 +180,12 @@ static inline void *brocard( void *arguments ) {
   const uint64_t *primes = range->primes;
   const uint64_t *primes_shifted = range->primes_shifted;
 
-  uint64_t *factorials = range->factorials;
+  uint64_t factorials[NUM_PRIMES];
+
+  for( uint i = 0; i < NUM_PRIMES; ++i ) {
+    factorials[i] = initialize_factorial( start - 1, primes[i], pinvs[i] );
+  }
+
   uint64_t last_n[NUM_PRIMES] = { 0 };
 
   for( uint64_t &i: last_n ) {
@@ -303,10 +308,6 @@ auto main() -> int {
   struct range_struct ranges[NUM_SUB_RANGES];
 
   for( uint i = 0; i < NUM_SUB_RANGES; ++i ) {
-    if ( i > 0 && i % 10 == 0 ) {
-      printf( "Finished calculating factorials for %'d sub-ranges out of %'d\n", i, NUM_SUB_RANGES );
-    }
-
     auto *range = static_cast<struct range_struct *>( malloc( sizeof( struct range_struct ) ) );
 
     range->tid = i;
@@ -318,20 +319,8 @@ auto main() -> int {
     range->bits = generate_bits( range->primes );
     range->pinvs = generate_pinvs( range->primes );
 
-    auto *factorials = static_cast<uint64_t *>( calloc( NUM_PRIMES, sizeof( uint64_t ) ) );
-    uint64_t n = range->start - 1;
-
-#pragma omp parallel for num_threads( FACTORIAL_NUM_THREADS ) schedule( dynamic )
-    for( uint i = 0; i < NUM_PRIMES; ++i ) {
-      factorials[i] = initialize_factorial( n, range->primes[i], range->pinvs[i] );
-    }
-
-    range->factorials = factorials;
-
     ranges[i] = *range;
   }
-
-  printf( "Finished calculating factorials for all %'d sub-ranges!\n", NUM_SUB_RANGES );
 
 #pragma omp parallel for schedule( dynamic )
   for( uint i = 0; i < NUM_SUB_RANGES; ++i ) {
