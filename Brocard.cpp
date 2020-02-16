@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 constexpr uint64_t STARTING_N = 1ULL;
-constexpr uint64_t ENDING_N = 1'000'000'000ULL;
+constexpr uint64_t ENDING_N = 5'000'000'000ULL;
 
 // Milestone used for printing progress
 constexpr uint64_t MILESTONE = 100'000'000;
@@ -26,14 +26,14 @@ constexpr uint FACTORIAL_NUM_THREADS = 8;
 // 30 = 1 in 1 billion of finding a potential solution
 // 40 = 1 in 1 trillion of finding a potential solution
 // 50 = 1 in 1 quadrillion of finding a potential solution
-constexpr uint NUM_PRIMES = 40;
+constexpr uint NUM_PRIMES = 50;
 
 // The amount of sub-ranges that the range (ENDING_N - STARTING_N) should be partitioned into.
-constexpr uint NUM_SUB_RANGES = 32; //( ENDING_N - STARTING_N ) / 39'062'500ULL;
+constexpr uint NUM_SUB_RANGES = ( ENDING_N - STARTING_N ) / 39'062'500ULL;
 
 // If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
-constexpr uint MULMOD_DIFFERENCE = 3'000'000;
+constexpr uint MULMOD_DIFFERENCE = 4'000'000;
 
 struct range_struct {
   uint tid;
