@@ -13,11 +13,6 @@ constexpr uint64_t ENDING_N = 5'000'000'000ULL;
 // Milestone used for printing progress
 constexpr uint64_t MILESTONE = 100'000'000;
 
-// The number of threads to use when computing the initial factorial values.
-// This is a memory hog, so a small amount of threads should be used here to
-// avoid running out of memory.
-constexpr uint FACTORIAL_NUM_THREADS = 8;
-
 // The name of the file to write potential solutions to.
 #define SOLUTION_FILE_NAME "brocard_solutions.txt"
 
@@ -196,6 +191,7 @@ static inline void *brocard( void *arguments ) {
   uint64_t n, norm, prime, pinv, prime_shifted;
 
   for( n = start; n <= end; ++n ) {
+#pragma unroll( 5 )
     for( i = 0; i < NUM_PRIMES; ++i ) {
       norm = norms[i];
       pinv = pinvs[i];
@@ -303,7 +299,6 @@ auto main() -> int {
   uint64_t partition_size = ( ENDING_N - STARTING_N ) / NUM_SUB_RANGES;
   printf( "Number of sub-ranges: %'d\n", NUM_SUB_RANGES );
   printf( "Size of each sub-range: %'llu\n", partition_size );
-  printf( "Beginning to calculate %'d factorials...\n", NUM_SUB_RANGES * NUM_PRIMES );
 
   struct range_struct ranges[NUM_SUB_RANGES];
 
