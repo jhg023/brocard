@@ -3,10 +3,8 @@
 #include <flint/nmod_vec.h>
 #include <flint/nmod_poly.h>
 #include <flint/ulong_extras.h>
-#include <immintrin.h>
 #include <locale.h>
 #include <unistd.h>
-#include "ThreadPool.hpp"
 
 constexpr uint64_t STARTING_N = 1ULL;
 constexpr uint64_t ENDING_N = 1'000'000'000'000'000ULL;
