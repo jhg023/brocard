@@ -6,25 +6,26 @@
 #include <immintrin.h>
 #include <locale.h>
 #include <unistd.h>
+#include "ThreadPool.hpp"
 
 constexpr uint64_t STARTING_N = 1ULL;
-constexpr uint64_t ENDING_N = 5'000'000'000ULL;
+constexpr uint64_t ENDING_N = 1'000'000'000'000'000ULL;
 
 // Milestone used for printing progress
-constexpr uint64_t MILESTONE = 100'000'000;
+constexpr uint64_t MILESTONE = 25'000'000'000;
 
 // The name of the file to write potential solutions to.
 #define SOLUTION_FILE_NAME "brocard_solutions.txt"
 
 // The number of primes to use when testing.
-// 
+//
 // 30 = 1 in 1 billion of finding a potential solution
 // 40 = 1 in 1 trillion of finding a potential solution
 // 50 = 1 in 1 quadrillion of finding a potential solution
 constexpr uint NUM_PRIMES = 50;
 
 // The amount of sub-ranges that the range (ENDING_N - STARTING_N) should be partitioned into.
-constexpr uint NUM_SUB_RANGES = ( ENDING_N - STARTING_N ) / 39'062'500ULL;
+constexpr uint NUM_SUB_RANGES = 65'536;
 
 // If 'last_n[i] - n >= MULMOD_DIFFERENCE', then a more efficient method will be used
 // to catch up 'last_n[i]' instead of repeatedly calling 'mulmod_preinv'.
@@ -43,7 +44,7 @@ struct range_struct {
 
 static inline uint64_t mulmod_preinv( uint64_t a, uint64_t b, uint64_t n, uint64_t ninv, uint64_t norm ) {
   __uint128_t prod = ( __uint128_t ) a * b;
-  
+
   uint64_t a_hi = prod >> 64;
   uint64_t a_lo = ( uint64_t ) prod;
 
@@ -163,7 +164,7 @@ static inline int jacobi_modified( uint64_t a, uint64_t b, uint64_t bit ) {
   return bit & 1;
 }
 
-static inline void *brocard( void *arguments ) {
+static inline void* brocard( void *arguments ) {
   auto *range = static_cast<struct range_struct *>( arguments );
 
   const uint tid = range->tid;
@@ -187,11 +188,10 @@ static inline void *brocard( void *arguments ) {
     i = start - 1;
   }
 
-  uint best_i = 25, i, result;
+  uint best_i = 43, i, result;
   uint64_t n, norm, prime, pinv, prime_shifted;
 
   for( n = start; n <= end; ++n ) {
-#pragma unroll( 5 )
     for( i = 0; i < NUM_PRIMES; ++i ) {
       norm = norms[i];
       pinv = pinvs[i];
@@ -216,19 +216,21 @@ static inline void *brocard( void *arguments ) {
     }
 
     if( __builtin_expect( i == NUM_PRIMES, 0 ) ) {
-      printf( "[Sub Range #%'d] Potential Solution: %'llu - primes[0] = %'llu - factorials[0] = %'llu\n", tid, n, primes[0], factorials[0] );
+      printf( "[Sub Range #%'d] Potential Solution: %'lu - primes[0] = %'lu - factorials[0] = %'lu\n", tid, n, primes[0], factorials[0] );
+      fflush( stdout );
       FILE *fp = fopen( SOLUTION_FILE_NAME, "ae" );
-      fprintf( fp, "%'llu\n", n );
+      fprintf( fp, "%'lu\n", n );
       fclose( fp );
     } else if( __builtin_expect( i >= best_i, 0 ) ) {
       best_i = i;
-      printf( "[Sub Range #%'d] Progress: %'llu (%.2f%%), Tests Passed: %d\n", tid, n, 100.0 * tid / NUM_SUB_RANGES, best_i );
+      printf( "[Sub Range #%'d] Progress: %'lu (%.2f%%), Tests Passed: %d\n", tid, n, 100.0 * tid / NUM_SUB_RANGES, best_i );
+      fflush( stdout );
     } else if( __builtin_expect( n % MILESTONE == 0, 0 ) ) {
-      printf( "[Sub Range #%'d] Progress: %'llu (%.2f%%)\n", tid, n, 100.0 * tid / NUM_SUB_RANGES );
+      printf( "[Sub Range #%'d] Progress: %'lu (%.2f%%)\n", tid, n, 100.0 * tid / NUM_SUB_RANGES );
+      fflush( stdout );
     }
   }
 
-  //printf( "[Thread #%d] Completed execution!\n", tid );
   return nullptr;
 }
 
@@ -298,10 +300,12 @@ auto main() -> int {
 
   uint64_t partition_size = ( ENDING_N - STARTING_N ) / NUM_SUB_RANGES;
   printf( "Number of sub-ranges: %'d\n", NUM_SUB_RANGES );
-  printf( "Size of each sub-range: %'llu\n", partition_size );
+  printf( "Size of each sub-range: %'lu\n", partition_size );
+  fflush( stdout );
 
   struct range_struct ranges[NUM_SUB_RANGES];
 
+#pragma omp parallel for schedule( dynamic )
   for( uint i = 0; i < NUM_SUB_RANGES; ++i ) {
     auto *range = static_cast<struct range_struct *>( malloc( sizeof( struct range_struct ) ) );
 
