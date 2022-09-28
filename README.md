@@ -14,7 +14,7 @@ Up until now, only the first `1x10^12` (1 trillion) numbers have been tested in 
  # Findings
  We tested the first `1x10^15` (1 quadrillion) values over a period of ~5 months (January-May, 2020), but no additional solutions were found.
  
- We used a similar algorithm to the one described in [this paper](http://unsolvedproblems.org/S99.pdf), but added additional optimizations (short-circuiting, Zen2 architecture-friendly code, etc.)
+ We used a similar algorithm to the one described in [this paper](https://web.archive.org/web/20181006100943/http://unsolvedproblems.org/S99.pdf), but added additional optimizations (short-circuiting, Zen2 architecture-friendly code, etc.)
  
  The number which passed the most tests (`49/50`) was `602,723,832,772,967`.
   - The odds of finding another number that passes that many tests is 1 in 500 trillion.
